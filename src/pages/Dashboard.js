@@ -23,32 +23,36 @@ function Dashboard() {
   const [souvenirs, setSouvenirs] = useState([]);
   const [categories, setCategories] = useState([]);
 
+  // New category and new item form
   const [newCategory, setNewCategory] = useState("");
   const [newItem, setNewItem] = useState({
     name: "",
     manufacturer: "",
-    price: "",
+    buy: "",
+    description: "",
+    size: "",
+    weight: "",
+    material: "",
     imageURL: "",
     categoryId: "",
-    description: "", // ✅ added description
     images: [],
   });
   const [addFiles, setAddFiles] = useState([]);
 
+  // Edit modal
   const [editingId, setEditingId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [editFiles, setEditFiles] = useState([]);
 
   const [uploadProgress, setUploadProgress] = useState({});
 
+  /* Fetch categories & souvenirs */
   useEffect(() => {
-    const categoriesCol = collection(db, "categories");
-    const unsubCats = onSnapshot(categoriesCol, (snap) => {
+    const unsubCats = onSnapshot(collection(db, "categories"), (snap) => {
       setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
-    const souvenirsCol = collection(db, "souvenirs");
-    const unsubSouvs = onSnapshot(souvenirsCol, (snap) => {
+    const unsubSouvs = onSnapshot(collection(db, "souvenirs"), (snap) => {
       setSouvenirs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
 
@@ -58,15 +62,16 @@ function Dashboard() {
     };
   }, []);
 
+  /* Add Category */
   const addCategory = async () => {
     if (!newCategory.trim()) return;
     await addDoc(collection(db, "categories"), { name: newCategory.trim() });
     setNewCategory("");
   };
 
-  const uploadFilesForSouvenir = async (souvenirId, files, onProgressKeyPrefix = "") => {
+  /* Upload files helper */
+  const uploadFilesForSouvenir = async (souvenirId, files, prefix = "") => {
     if (!files || files.length === 0) return [];
-
     const uploadResults = [];
 
     for (let i = 0; i < files.length; i++) {
@@ -84,20 +89,13 @@ function Dashboard() {
             const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
             setUploadProgress((prev) => ({
               ...prev,
-              [`${onProgressKeyPrefix}${filename}`]: percent,
+              [`${prefix}${filename}`]: percent,
             }));
           },
-          (error) => {
-            console.error("Upload failed", error);
-            reject(error);
-          },
+          reject,
           async () => {
-            try {
-              const url = await getDownloadURL(uploadTask.snapshot.ref);
-              resolve({ url, path });
-            } catch (e) {
-              reject(e);
-            }
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve({ url, path });
           }
         );
       });
@@ -107,7 +105,7 @@ function Dashboard() {
 
       setUploadProgress((prev) => {
         const copy = { ...prev };
-        delete copy[`${onProgressKeyPrefix}${filename}`];
+        delete copy[`${prefix}${filename}`];
         return copy;
       });
     }
@@ -115,19 +113,32 @@ function Dashboard() {
     return uploadResults;
   };
 
+  /* Add Souvenir */
   const addSouvenir = async () => {
-    if (!newItem.name || !newItem.manufacturer || !newItem.price || !newItem.categoryId) {
-      alert("Fill name, manufacturer, price, category.");
+    // REQUIRED FIELDS
+    if (
+      !newItem.name ||
+      !newItem.manufacturer ||
+      !newItem.buy ||
+      !newItem.description ||
+      !newItem.size ||
+      !newItem.material ||
+      !newItem.categoryId
+    ) {
+      alert("Please fill all required fields.");
       return;
     }
 
     const docRef = await addDoc(collection(db, "souvenirs"), {
       name: newItem.name,
       manufacturer: newItem.manufacturer,
-      price: newItem.price,
+      buy: newItem.buy,
+      description: newItem.description,
+      size: newItem.size,
+      weight: newItem.weight || "",
+      material: newItem.material,
       imageURL: newItem.imageURL || "",
       categoryId: newItem.categoryId,
-      description: newItem.description || "", // ✅ add description
       images: [],
       createdAt: Date.now(),
     });
@@ -135,49 +146,41 @@ function Dashboard() {
     const filesArray = Array.from(addFiles || []);
     if (filesArray.length) {
       const uploaded = await uploadFilesForSouvenir(docRef.id, filesArray, "add_");
-      await updateDoc(doc(db, "souvenirs", docRef.id), {
-        images: uploaded,
-      });
+      await updateDoc(doc(db, "souvenirs", docRef.id), { images: uploaded });
     }
 
     setNewItem({
       name: "",
       manufacturer: "",
-      price: "",
+      buy: "",
+      description: "",
+      size: "",
+      weight: "",
+      material: "",
       imageURL: "",
       categoryId: "",
-      description: "",
       images: [],
     });
     setAddFiles([]);
   };
 
+  /* Delete souvenir */
   const deleteSouvenir = async (id) => {
-    if (!window.confirm("Delete this souvenir and all its images?")) return;
+    if (!window.confirm("Delete this souvenir?")) return;
 
     try {
       const listRef = storageRef(storage, `souvenirs/${id}`);
       const res = await listAll(listRef);
-      const deletePromises = res.items.map((itemRef) => deleteObject(itemRef));
-      await Promise.all(deletePromises);
-    } catch (e) {
-      console.warn("Error deleting storage files:", e);
-    }
+      await Promise.all(res.items.map((itemRef) => deleteObject(itemRef)));
+    } catch {}
 
     await deleteDoc(doc(db, "souvenirs", id));
   };
 
-  const startEdit = (souvenir) => {
-    setEditingId(souvenir.id);
-    setEditingItem({
-      name: souvenir.name || "",
-      manufacturer: souvenir.manufacturer || "",
-      price: souvenir.price || "",
-      imageURL: souvenir.imageURL || "",
-      categoryId: souvenir.categoryId || "",
-      description: souvenir.description || "", // ✅ description
-      images: souvenir.images || [],
-    });
+  /* Start Edit */
+  const startEdit = (s) => {
+    setEditingId(s.id);
+    setEditingItem({ ...s });
     setEditFiles([]);
   };
 
@@ -187,46 +190,47 @@ function Dashboard() {
     setEditFiles([]);
   };
 
+  /* Save Edit */
   const saveEdit = async () => {
-    if (!editingId || !editingItem) return;
+    if (!editingItem) return;
 
     const docRef = doc(db, "souvenirs", editingId);
+
     await updateDoc(docRef, {
       name: editingItem.name,
       manufacturer: editingItem.manufacturer,
-      price: editingItem.price,
+      buy: editingItem.buy,
+      description: editingItem.description,
+      size: editingItem.size,
+      weight: editingItem.weight || "",
+      material: editingItem.material,
       imageURL: editingItem.imageURL || "",
       categoryId: editingItem.categoryId,
-      description: editingItem.description || "", // ✅ description
     });
 
     const filesArray = Array.from(editFiles || []);
     if (filesArray.length) {
       const uploaded = await uploadFilesForSouvenir(editingId, filesArray, "edit_");
-      const updatedImages = [...(editingItem.images || []), ...uploaded];
-      await updateDoc(docRef, { images: updatedImages });
-      setEditingItem((prev) => ({ ...prev, images: updatedImages }));
+      await updateDoc(docRef, {
+        images: [...editingItem.images, ...uploaded],
+      });
     }
 
-    setEditingId(null);
-    setEditingItem(null);
-    setEditFiles([]);
+    cancelEdit();
   };
 
+  /* Delete single image */
   const deleteImageFromSouvenir = async (souvenirId, imageObj) => {
     if (!window.confirm("Delete this image?")) return;
-    try {
-      const fileRef = storageRef(storage, imageObj.path);
-      await deleteObject(fileRef);
-    } catch (e) {
-      console.warn("Error deleting image:", e);
-    }
 
-    const docRef = doc(db, "souvenirs", souvenirId);
+    try {
+      await deleteObject(storageRef(storage, imageObj.path));
+    } catch {}
+
     const s = souvenirs.find((s) => s.id === souvenirId);
-    const currentImages = s?.images || [];
-    const newImages = currentImages.filter((im) => im.path !== imageObj.path);
-    await updateDoc(docRef, { images: newImages });
+    const newImages = s.images.filter((im) => im.path !== imageObj.path);
+
+    await updateDoc(doc(db, "souvenirs", souvenirId), { images: newImages });
   };
 
   const handleAddFiles = (e) => setAddFiles(e.target.files);
@@ -240,7 +244,7 @@ function Dashboard() {
 
         {/* Category Section */}
         <div style={{ marginTop: "20px" }}>
-          <h3>Add Category</h3>
+          <h3 style={{ color: "#4E342E" }}>Add Category</h3>
           <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
             <input
               type="text"
@@ -248,77 +252,407 @@ function Dashboard() {
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
             />
-            <button onClick={addCategory}>Add Category</button>
+            <button
+              onClick={addCategory}
+              style={{
+                backgroundColor: "#4E342E",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                padding: "8px 15px",
+                cursor: "pointer",
+              }}
+            >
+              Add Category
+            </button>
+          </div>
+
+          <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {categories.map((c) => (
+              <div key={c.id} style={{ background: "#FFF", padding: "6px 10px", borderRadius: 6 }}>
+                {c.name}
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Add Souvenir Form */}
-        <div style={{ display: "flex", gap: "10px", marginTop: "20px", flexWrap: "wrap", background: "#fff", padding: 12, borderRadius: 8 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginTop: "30px",
+            flexWrap: "wrap",
+            alignItems: "center",
+            background: "#fff",
+            padding: 12,
+            borderRadius: 8,
+          }}
+        >
           <input
             type="text"
-            placeholder="Souvenir Name"
+            placeholder="Name *"
             value={newItem.name}
             onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
           />
+
           <input
             type="text"
-            placeholder="Manufacturer"
+            placeholder="Manufacturer *"
             value={newItem.manufacturer}
             onChange={(e) => setNewItem({ ...newItem, manufacturer: e.target.value })}
           />
+
           <input
             type="number"
-            placeholder="Price"
-            value={newItem.price}
-            onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
+            placeholder="Buy Price *"
+            value={newItem.buy}
+            onChange={(e) => setNewItem({ ...newItem, buy: e.target.value })}
           />
+
           <input
             type="text"
-            placeholder="Optional thumbnail URL"
-            value={newItem.imageURL}
-            onChange={(e) => setNewItem({ ...newItem, imageURL: e.target.value })}
-          />
-          <textarea
-            placeholder="Description"
+            placeholder="Description *"
             value={newItem.description}
             onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
           />
-          <select value={newItem.categoryId} onChange={(e) => setNewItem({ ...newItem, categoryId: e.target.value })}>
-            <option value="">Choose Category</option>
-            {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+
+          <input
+            type="text"
+            placeholder="Size (x*y*z) *"
+            value={newItem.size}
+            onChange={(e) => setNewItem({ ...newItem, size: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Material *"
+            value={newItem.material}
+            onChange={(e) => setNewItem({ ...newItem, material: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Weight (optional)"
+            value={newItem.weight}
+            onChange={(e) => setNewItem({ ...newItem, weight: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Thumbnail URL (optional)"
+            value={newItem.imageURL}
+            onChange={(e) => setNewItem({ ...newItem, imageURL: e.target.value })}
+          />
+
+          <select
+            value={newItem.categoryId}
+            onChange={(e) => setNewItem({ ...newItem, categoryId: e.target.value })}
+          >
+            <option value="">Choose Category *</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
           </select>
-          <label>
+
+          <label style={{ cursor: "pointer" }}>
             <input type="file" multiple onChange={handleAddFiles} style={{ display: "none" }} />
-            <div>Choose Images</div>
+            <div style={{ padding: "6px 10px", background: "#eee", borderRadius: 6 }}>
+              Choose Images
+            </div>
           </label>
-          <button onClick={addSouvenir}>Add Souvenir</button>
+
+          <button
+            onClick={addSouvenir}
+            style={{
+              backgroundColor: "#708238",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              padding: "8px 15px",
+              cursor: "pointer",
+            }}
+          >
+            Add Souvenir
+          </button>
         </div>
 
-        {/* Souvenir list (with description) */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: "20px", marginTop: "30px" }}>
-          {souvenirs.map((souvenir) => {
-            const category = categories.find((c) => c.id === souvenir.categoryId);
+        {/* Files Preview */}
+        {addFiles.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <strong>Files to upload:</strong>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              {Array.from(addFiles).map((f, i) => (
+                <div key={i} style={{ padding: 6, background: "#fff", borderRadius: 6 }}>
+                  {f.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Souvenirs Grid */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            gap: "20px",
+            marginTop: "30px",
+          }}
+        >
+          {souvenirs.map((s) => {
+            const cat = categories.find((c) => c.id === s.categoryId);
             return (
-              <div key={souvenir.id} style={{ backgroundColor: "#fff", padding: 12, borderRadius: 8 }}>
-                <h3>{souvenir.name}</h3>
-                <p>{souvenir.manufacturer}</p>
-                <p>{souvenir.price} ₪</p>
-                <p><strong>Category:</strong> {category?.name || "-"}</p>
-                <p><strong>Description:</strong> {souvenir.description || "-"}</p>
-                <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
-                  {(souvenir.images || []).map((img) => (
-                    <div key={img.path}>
-                      <img src={img.url} alt="" style={{ width: 70, height: 70, objectFit: "cover" }} />
-                      <button onClick={() => deleteImageFromSouvenir(souvenir.id, img)}>✕</button>
+              <div
+                key={s.id}
+                style={{
+                  background: "white",
+                  borderRadius: "10px",
+                  padding: "15px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    height: 180,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    background: "#f8f8f8",
+                    borderRadius: 8,
+                  }}
+                >
+                  {s.imageURL ? (
+                    <img src={s.imageURL} style={{ maxWidth: "100%", maxHeight: "100%" }} />
+                  ) : s.images?.length > 0 ? (
+                    <img src={s.images[0].url} style={{ maxWidth: "100%", maxHeight: "100%" }} />
+                  ) : (
+                    "No image"
+                  )}
+                </div>
+
+                <h3 style={{ color: "#708238", marginTop: 12 }}>{s.name}</h3>
+                <p>{s.manufacturer}</p>
+                <p><b>Buy:</b> {s.buy} ₪</p>
+                <p><b>Description:</b> {s.description}</p>
+                <p><b>Size:</b> {s.size}</p>
+                <p><b>Material:</b> {s.material}</p>
+                {s.weight && <p><b>Weight:</b> {s.weight}</p>}
+                <p><b>Category:</b> {cat?.name || "—"}</p>
+
+                {/* images thumbnails */}
+                <div style={{ display: "flex", gap: 8, marginTop: 8, overflowX: "auto" }}>
+                  {s.images?.map((img) => (
+                    <div key={img.path} style={{ position: "relative" }}>
+                      <img
+                        src={img.url}
+                        style={{
+                          width: 70,
+                          height: 70,
+                          objectFit: "cover",
+                          borderRadius: 6,
+                        }}
+                      />
+                      <button
+                        onClick={() => deleteImageFromSouvenir(s.id, img)}
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          background: "rgba(0,0,0,0.6)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 4,
+                          padding: "2px 5px",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        ✕
+                      </button>
                     </div>
                   ))}
                 </div>
-                <button onClick={() => startEdit(souvenir)}>Edit</button>
-                <button onClick={() => deleteSouvenir(souvenir.id)}>Delete</button>
+
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button
+                    onClick={() => startEdit(s)}
+                    style={{
+                      backgroundColor: "#4E342E",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "6px 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    onClick={() => deleteSouvenir(s.id)}
+                    style={{
+                      backgroundColor: "#B00020",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "6px 12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
+
+        {/* Edit Modal */}
+        {editingId && editingItem && (
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.4)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 9999,
+            }}
+          >
+            <div style={{ background: "#fff", padding: 20, borderRadius: 8, width: 900 }}>
+              <h3>Edit Souvenir</h3>
+
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={editingItem.name}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, name: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Manufacturer"
+                  value={editingItem.manufacturer}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, manufacturer: e.target.value })
+                  }
+                />
+
+                <input
+                  type="number"
+                  placeholder="Buy Price"
+                  value={editingItem.buy}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, buy: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Description"
+                  value={editingItem.description}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, description: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Size (x*y*z)"
+                  value={editingItem.size}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, size: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Material"
+                  value={editingItem.material}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, material: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Weight (optional)"
+                  value={editingItem.weight}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, weight: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Thumbnail URL"
+                  value={editingItem.imageURL}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, imageURL: e.target.value })
+                  }
+                />
+
+                <select
+                  value={editingItem.categoryId}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, categoryId: e.target.value })
+                  }
+                >
+                  <option value="">Choose Category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+
+                <label>
+                  <input type="file" multiple onChange={handleEditFiles} style={{ display: "none" }} />
+                  <div style={{ padding: 6, background: "#eee", borderRadius: 6, cursor: "pointer" }}>
+                    Add Images
+                  </div>
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+                <button
+                  onClick={saveEdit}
+                  style={{
+                    backgroundColor: "#708238",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 15px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Save Changes
+                </button>
+
+                <button
+                  onClick={cancelEdit}
+                  style={{
+                    backgroundColor: "#B00020",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 15px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,0 +1,69 @@
+/* Background modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.form-container {
+  background: white;
+  width: 90%;
+  max-width: 500px;
+  padding: 25px;
+  border-radius: 15px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.25);
+}
+
+form input,
+form textarea,
+form select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #aaa;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+textarea {
+  resize: none;
+  height: 80px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.save-btn,
+.cancel-btn {
+  padding: 10px 15px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  color: white;
+  font-size: 15px;
+}
+
+.save-btn {
+  background: #4caf50;
+}
+
+.save-btn:hover {
+  background: #43a047;
+}
+
+.cancel-btn {
+  background: #999;
+}
+
+.cancel-btn:hover {
+  background: #777;
+}
