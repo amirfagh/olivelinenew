@@ -1,0 +1,305 @@
+/* --------------------------------------------------
+   GLOBAL PAGE LAYOUT
+-------------------------------------------------- */
+.catalog-page {
+  padding: 30px;
+  max-width: 1200px;
+  margin: auto;
+  position: relative;
+  font-family: "Segoe UI", Arial, sans-serif;
+  animation: fadeInPage 0.6s ease-in;
+}
+
+@keyframes fadeInPage {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+h2 {
+  text-align: center;
+  margin-bottom: 25px;
+  color: #708238;
+  font-weight: 600;
+}
+
+/* --------------------------------------------------
+   BASKET ICON (TOP RIGHT)
+-------------------------------------------------- */
+.basket-icon {
+  position: fixed;
+  top:100px;
+  right: 25px;
+  font-size: 34px;
+  cursor: pointer;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 50%;
+  border: 2px solid #708238;
+  transition: 0.25s;
+  z-index: 1100;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.15);
+}
+
+.basket-icon:hover {
+  background: #708238;
+  color: white;
+  transform: scale(1.05);
+}
+
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: crimson;
+  color: white;
+  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: 50%;
+}
+
+/* --------------------------------------------------
+   PRODUCT GRID
+-------------------------------------------------- */
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 22px;
+}
+
+/* --------------------------------------------------
+   PRODUCT CARD
+-------------------------------------------------- */
+.catalog-card {
+  background: #fff;
+  padding: 15px;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  text-align: center;
+  transition: 0.3s ease;
+  animation: fadeInCard 0.6s ease;
+  animation-fill-mode: both;
+}
+
+@keyframes fadeInCard {
+  from { opacity: 0; transform: translateY(15px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.catalog-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+}
+
+.catalog-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.catalog-card h3 {
+  margin: 12px 0 5px;
+  color: #333;
+  font-size: 18px;
+}
+
+.catalog-card p {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.catalog-card button {
+  margin-top: 8px;
+  padding: 9px 15px;
+  background: #708238;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.catalog-card button:hover {
+  background: #55632a;
+}
+
+/* --------------------------------------------------
+   SLIDE-IN BASKET (RIGHT DRAWER)
+-------------------------------------------------- */
+.basket-drawer {
+  position: fixed;
+  top: 0;
+  right: -400px; /* hidden */
+  width: 360px;
+  height: 100vh;
+  background: white;
+  padding: 25px;
+  border-radius: 0 0 0 14px;
+  box-shadow: -2px 0px 20px rgba(0,0,0,0.2);
+  z-index: 2000;
+  transition: right 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.basket-drawer.open {
+  right: 0; /* slide in */
+}
+
+.basket-drawer h3 {
+  color: #708238;
+  margin-bottom: 18px;
+}
+
+/* --------------------------------------------------
+   BASKET ITEMS
+-------------------------------------------------- */
+.basket-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.qty-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qty-box button {
+  padding: 4px 8px;
+  border: none;
+  background: #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.qty-box span {
+  min-width: 22px;
+  text-align: center;
+}
+
+.remove {
+  background: transparent;
+  color: crimson;
+  cursor: pointer;
+  border: none;
+  font-size: 16px;
+}
+
+/* --------------------------------------------------
+   FLOATING ORDER BUTTON
+-------------------------------------------------- */
+.floating-order-btn {
+  position: fixed;
+  bottom: 25px;
+  right: 25px;
+  background: #708238;
+  color: white;
+  border: none;
+  border-radius: 50px;
+  padding: 14px 25px;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+  transition: 0.25s ease;
+  z-index: 1500;
+}
+
+.floating-order-btn:hover {
+  background: #55632a;
+  transform: scale(1.05);
+}
+
+/* --------------------------------------------------
+   MODAL
+-------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  background: white;
+  padding: 30px;
+  width: 350px;
+  border-radius: 14px;
+  text-align: center;
+  animation: popIn 0.25s ease;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.modal h2 {
+  margin-bottom: 20px;
+  color: #708238;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.modal-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+
+.modal-actions .cancel {
+  background: #ccc;
+}
+
+.modal-actions .confirm {
+  background: #708238;
+  color: white;
+}
+
+.modal-actions .confirm:hover {
+  background: #55632a;
+}
+
+/* --------------------------------------------------
+   MOBILE RESPONSIVE
+-------------------------------------------------- */
+@media (max-width: 600px) {
+  .basket-drawer {
+    width: 90%;
+  }
+
+  .catalog-page {
+    padding: 20px;
+  }
+
+  .catalog-card img {
+    height: 160px;
+  }
+
+  .floating-order-btn {
+    bottom: 20px;
+    right: 20px;
+  }
+
+  .basket-icon {
+    top: 15px;
+    right: 15px;
+  }
+}
