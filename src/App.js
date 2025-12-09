@@ -5,7 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import Catalog from "./pages/Catalog";
 import RequireAdmin from "./components/RequireAdmin";
 import AdminAddUser from "./pages/AdminAddUser";
-
+import Orders from "./pages/Orders";
 function App() {
   return (
     <Router>
@@ -24,6 +24,12 @@ function App() {
     <AdminAddUser />
   </RequireAdmin>
 } />
+<Route path="/orders" element={
+   <RequireAdmin>
+    
+    <Orders />
+    </RequireAdmin>
+    } />
         <Route path="/catalog" element={<Catalog />} />
       </Routes>
     </Router>

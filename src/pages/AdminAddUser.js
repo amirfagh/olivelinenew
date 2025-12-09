@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { db } from "../firebase/firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
+import Navbar from "../components/Navbar";
 
 function AdminAddUser() {
   const [email, setEmail] = useState("");
@@ -27,7 +28,7 @@ function AdminAddUser() {
     try {
       await setDoc(userRef, {
         allowed: true,
-        role: role.trim(), // remove spaces just in case
+        role: role.trim(),
       });
       setMessage(`User ${emailLower} added successfully as ${role}.`);
       setEmail("");
@@ -39,56 +40,62 @@ function AdminAddUser() {
   };
 
   return (
-    <div style={{
-      maxWidth: "400px",
-      margin: "50px auto",
-      padding: "20px",
-      border: "1px solid #ccc",
-      borderRadius: "8px",
-      backgroundColor: "#f9f9f9",
-    }}>
-      <h2>Add New User</h2>
+    <>
+      <Navbar />
 
-      <form onSubmit={handleAddUser} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        <label>
-          Email:
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="user@gmail.com"
-            required
-            style={{ width: "100%", padding: "8px", marginTop: "5px" }}
-          />
-        </label>
+      <div className="max-w-md mx-auto mt-16 p-6 bg-softwhite border border-brown/20 rounded-xl shadow-sm">
+        <h2 className="text-2xl font-semibold text-center text-brown mb-6">
+          Add New User
+        </h2>
 
-        <label>
-          Role:
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            style={{ width: "100%", padding: "8px", marginTop: "5px" }}
+        <form className="flex flex-col gap-5" onSubmit={handleAddUser}>
+          {/* Email */}
+          <label className="flex flex-col gap-1 font-medium text-brown">
+            Email:
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="user@gmail.com"
+              required
+              className="px-3 py-2 bg-cream border border-brown/30 rounded-lg 
+                         focus:outline-none focus:ring-2 focus:ring-olive/50 text-brown"
+            />
+          </label>
+
+          {/* Role */}
+          <label className="flex flex-col gap-1 font-medium text-brown">
+            Role:
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              className="px-3 py-2 bg-cream border border-brown/30 rounded-lg 
+                         focus:outline-none focus:ring-2 focus:ring-olive/50 text-brown"
+            >
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            className="bg-olive text-softwhite py-2 rounded-lg font-semibold 
+                       hover:bg-brown transition-colors"
           >
-            <option value="viewer">Viewer</option>
-            <option value="editor">Editor</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
+            Add User
+          </button>
+        </form>
 
-        <button type="submit" style={{
-          backgroundColor: "#708238",
-          color: "white",
-          border: "none",
-          padding: "10px",
-          borderRadius: "6px",
-          cursor: "pointer"
-        }}>
-          Add User
-        </button>
-      </form>
-
-      {message && <p style={{ marginTop: "15px", color: "#333" }}>{message}</p>}
-    </div>
+        {/* Message */}
+        {message && (
+          <p className="mt-5 p-3 bg-cream border border-brown/20 rounded-lg text-brown shadow-sm">
+            {message}
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 

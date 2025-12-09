@@ -1,39 +1,53 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { db, auth } from "../firebase/firebase";
-import { collection, onSnapshot, addDoc, Timestamp, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  Timestamp,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import Navbar from "../components/Navbar";
 
-function Catalog() {
+// OliveLine Catalog with Tailwind + brand colors
+export default function Catalog() {
   const [souvenirs, setSouvenirs] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [priceSort, setPriceSort] = useState("");
   const [basket, setBasket] = useState([]);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(null); // { type, text }
   const [role, setRole] = useState(null);
 
-  const [showBasket, setShowBasket] = useState(false); // New: basket drawer
-  const [showModal, setShowModal] = useState(false); // Order confirmation modal
+  const [showBasket, setShowBasket] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  // Fetch user role
+  // --- Fetch role ---
   useEffect(() => {
     const fetchRole = async () => {
       if (!auth.currentUser) return;
-      const userRef = doc(db, "users", auth.currentUser.uid);
-      const snap = await getDoc(userRef);
-      if (snap.exists()) setRole(snap.data().role.trim());
+      try {
+        const userRef = doc(db, "users", auth.currentUser.uid);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) setRole((snap.data().role || "").trim());
+      } catch (e) {
+        console.error("Error fetching role:", e);
+      }
     };
     fetchRole();
   }, []);
 
-  // Fetch categories & souvenirs
+  // --- Firestore listeners ---
   useEffect(() => {
     const unsubCats = onSnapshot(collection(db, "categories"), (snap) =>
       setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
 
     const unsubSouvs = onSnapshot(collection(db, "souvenirs"), (snap) =>
-      setSouvenirs(snap.docs.map((d) => ({ id: d.id, quantity: 1, ...d.data() })))
+      setSouvenirs(
+        snap.docs.map((d) => ({ id: d.id, quantity: 1, ...d.data() }))
+      )
     );
 
     return () => {
@@ -42,6 +56,7 @@ function Catalog() {
     };
   }, []);
 
+  // Derived displayed list
   const displayedSouvenirs = souvenirs
     .filter((s) => (selectedCategory ? s.categoryId === selectedCategory : true))
     .sort((a, b) => {
@@ -50,42 +65,58 @@ function Catalog() {
       return 0;
     });
 
-  // -------- Basket --------
+  // --- Toast helper ---
+  const pushMessage = (text, type = "success", ms = 2500) => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage(null), ms);
+  };
+
+  // --- Basket helpers ---
   const addToBasket = (souvenir) => {
     const existing = basket.find((item) => item.id === souvenir.id);
 
+    const qty = Number(souvenir.quantity) || 1;
+
+    // Pick the first valid image
+    const image = souvenir.imageURL
+      ? souvenir.imageURL
+      : souvenir.images && souvenir.images.length > 0
+      ? souvenir.images[0].url
+      : null;
+
     if (existing) {
-      setBasket(
-        basket.map((item) =>
+      setBasket((prev) =>
+        prev.map((item) =>
           item.id === souvenir.id
-            ? { ...item, quantity: item.quantity + souvenir.quantity }
+            ? { ...item, quantity: Number(item.quantity) + qty }
             : item
         )
       );
     } else {
-      setBasket([...basket, { ...souvenir }]);
+      const itemToAdd = { ...souvenir, image, quantity: qty };
+      setBasket((prev) => [...prev, itemToAdd]);
     }
 
-    setMessage(`${souvenir.name} added to basket!`);
-    setTimeout(() => setMessage(""), 2000);
+    pushMessage(`${souvenir.name} added to basket!`, "success");
   };
 
   const updateBasketQuantity = (id, qty) => {
-    if (qty < 1) return;
-    setBasket(
-      basket.map((item) =>
-        item.id === id ? { ...item, quantity: qty } : item
-      )
+    if (qty < 1 || isNaN(qty)) return;
+    setBasket((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, quantity: qty } : item))
     );
   };
 
   const removeFromBasket = (id) => {
-    setBasket(basket.filter((item) => item.id !== id));
+    setBasket((prev) => prev.filter((item) => item.id !== id));
   };
 
   const confirmOrder = () => {
-    if (basket.length === 0) return alert("Your basket is empty!");
-    setShowModal(true);
+    if (!auth.currentUser)
+      return pushMessage("You must be signed in to place an order", "error");
+    if (basket.length === 0)
+      return pushMessage("Your basket is empty", "error");
+    setShowConfirm(true);
     setShowBasket(false);
   };
 
@@ -104,362 +135,381 @@ function Catalog() {
         createdAt: Timestamp.now(),
       });
       setBasket([]);
-      setShowModal(false);
-      setMessage("Order placed successfully!");
-      setTimeout(() => setMessage(""), 3000);
+      setShowConfirm(false);
+      pushMessage("Order placed successfully!", "success", 3000);
     } catch (error) {
       console.error(error);
-      setMessage("Error placing order.");
+      pushMessage("Error placing order.", "error");
     }
   };
 
+  const subtotal = basket.reduce(
+    (sum, item) => sum + Number(item.price) * Number(item.quantity),
+    0
+  );
+  const vat = subtotal * 0.18;
+  const total = subtotal + vat;
+
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "#F5F5F5" }}>
+    <div className="min-h-screen bg-cream text-brown">
       <Navbar />
 
-      {/* 🛒 Floating Basket Icon */}
-      {role === "viewer" && (
-        <div
-          onClick={() => setShowBasket(true)}
-          style={{
-            position: "fixed",
-            top: 100,
-            right: 20,
-            background: "#4E342E",
-            color: "white",
-            padding: "12px 16px",
-            borderRadius: "50%",
-            cursor: "pointer",
-            zIndex: 999,
-            fontSize: 18,
-            boxShadow: "0 3px 8px rgba(0,0,0,0.3)",
-          }}
-        >
-          🛒
-          {basket.length > 0 && (
-            <span
-              style={{
-                marginLeft: 6,
-                background: "red",
-                borderRadius: "50%",
-                padding: "3px 7px",
-                color: "white",
-                fontSize: 12,
-              }}
-            >
-              {basket.length}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Page header */}
+      <div className="max-w-6xl mx-auto px-6 py-8">
+        <div className="flex items-center justify-between mb-6 gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-brown">
+              Souvenir Catalog
+            </h1>
+            <p className="text-sm text-brown/70">
+              Handpicked olive-wood and specialty items from OliveLine.
+            </p>
+          </div>
 
-      <div style={{ padding: "30px", maxWidth: 1200, margin: "0 auto" }}>
-        <h2 style={{ color: "#4E342E", marginBottom: 20 }}>Souvenir Catalog</h2>
-
-        {/* ---------- Filters ---------- */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-          <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
-            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-          >
-            <option value="">All Categories</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-
-          <select
-            value={priceSort}
-            onChange={(e) => setPriceSort(e.target.value)}
-            style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #ccc" }}
-          >
-            <option value="">Sort by Price</option>
-            <option value="asc">Lowest to Highest</option>
-            <option value="desc">Highest to Lowest</option>
-          </select>
-        </div>
-
-        {/* ---------- Souvenir Grid ---------- */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-            gap: "20px",
-          }}
-        >
-          {displayedSouvenirs.map((souvenir) => {
-            const category = categories.find((c) => c.id === souvenir.categoryId);
-            return (
-              <div
-                key={souvenir.id}
-                style={{
-                  backgroundColor: "white",
-                  borderRadius: 10,
-                  padding: 15,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-                }}
+          <div className="flex items-center gap-3">
+            {/* Filters toolbar */}
+            <div className="bg-softwhite shadow-sm rounded-md p-2 flex items-center gap-2 border border-brown/10">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="text-sm px-3 py-2 rounded-md border border-brown/20 focus:outline-none focus:ring-2 focus:ring-olive/40 bg-softwhite"
               >
-                <div
-                  style={{
-                    height: 200,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                    borderRadius: 8,
-                    background: "#f0f0f0",
-                  }}
-                >
+                <option value="">All Categories</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={priceSort}
+                onChange={(e) => setPriceSort(e.target.value)}
+                className="text-sm px-3 py-2 rounded-md border border-brown/20 focus:outline-none focus:ring-2 focus:ring-olive/40 bg-softwhite"
+              >
+                <option value="">Sort by Price</option>
+                <option value="asc">Lowest to Highest</option>
+                <option value="desc">Highest to Lowest</option>
+              </select>
+
+              <button
+                onClick={() => {
+                  setSelectedCategory("");
+                  setPriceSort("");
+                }}
+                className="text-sm px-3 py-2 rounded-md bg-cream border border-brown/20 hover:bg-softwhite transition"
+              >
+                Reset
+              </button>
+            </div>
+
+            {/* Basket button for viewers */}
+            {role === "viewer" && (
+              <button
+                onClick={() => setShowBasket(true)}
+                className="relative inline-flex items-center gap-2 px-4 py-2 bg-olive text-softwhite rounded-full shadow hover:scale-105 transform transition"
+              >
+                <span className="text-lg">🛒</span>
+                <span className="hidden sm:inline">Basket</span>
+                {basket.length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-brown text-softwhite rounded-full w-6 h-6 flex items-center justify-center text-xs">
+                    {basket.length}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Grid of products */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {displayedSouvenirs.map((souvenir) => {
+            const category = categories.find(
+              (c) => c.id === souvenir.categoryId
+            );
+            return (
+              <article
+                key={souvenir.id}
+                className="bg-softwhite rounded-2xl shadow-sm border border-brown/10 hover:shadow-md transform hover:-translate-y-1 transition overflow-hidden"
+              >
+                <div className="relative h-56 bg-cream flex items-center justify-center">
                   {souvenir.imageURL ? (
                     <img
                       src={souvenir.imageURL}
                       alt={souvenir.name}
-                      style={{ maxWidth: "100%", maxHeight: "100%" }}
+                      className="object-contain max-h-full max-w-full transition-transform duration-300 hover:scale-105"
                     />
                   ) : souvenir.images && souvenir.images.length > 0 ? (
                     <img
                       src={souvenir.images[0].url}
                       alt={souvenir.name}
-                      style={{ maxWidth: "100%", maxHeight: "100%" }}
+                      className="object-contain max-h-full max-w-full transition-transform duration-300 hover:scale-105"
                     />
                   ) : (
-                    <div style={{ color: "#999" }}>No image</div>
+                    <div className="text-brown/40">No image</div>
+                  )}
+
+                  {/* quick add floating button */}
+                  {role === "viewer" && (
+                    <button
+                      onClick={() => addToBasket(souvenir)}
+                      className="absolute bottom-3 right-3 bg-olive text-softwhite px-3 py-1 rounded-full text-sm shadow hover:bg-brown transition"
+                    >
+                      + Add
+                    </button>
                   )}
                 </div>
 
-                <h3 style={{ color: "#708238", marginTop: 12 }}>{souvenir.name}</h3>
-                <p style={{ color: "#4E342E", margin: "5px 0" }}>{souvenir.manufacturer}</p>
-                <p style={{ margin: "5px 0" }}>{souvenir.price} ₪</p>
-                <p><strong>Category: </strong>{category ? category.name : "-"}</p>
-                <p><strong>Description: </strong>{souvenir.description || "-"}</p>
-
-                {role === "viewer" && (
-                  <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-                    <input
-                      type="number"
-                      min={1}
-                      value={souvenir.quantity}
-onChange={(e) => {
-  const val = e.target.value;
-  setSouvenirs((prev) =>
-    prev.map((item) =>
-      item.id === souvenir.id
-        ? { ...item, quantity: val === "" ? "" : parseInt(val) }
-        : item
-    )
-  );
-}}
-
-                      style={{
-                        width: 60,
-                        padding: 5,
-                        borderRadius: 4,
-                        border: "1px solid #ccc",
-                      }}
-                    />
-
-                    <button
-                      onClick={() => addToBasket(souvenir)}
-                      style={{
-                        backgroundColor: "#708238",
-                        color: "white",
-                        border: "none",
-                        borderRadius: 6,
-                        padding: "6px 12px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Add
-                    </button>
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-brown">
+                        {souvenir.name}
+                      </h3>
+                      <p className="text-xs text-brown/60 mt-1">
+                        {souvenir.manufacturer}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-olive">
+                        {Number(souvenir.price).toFixed(2)} ₪
+                      </div>
+                      <div className="text-xs text-brown/50">Price</div>
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  <p className="text-sm text-brown mt-3">
+                    {souvenir.description || "No description"}
+                  </p>
+
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block bg-olive/10 text-olive text-xs px-2 py-1 rounded-md">
+                        {category ? category.name : "-"}
+                      </span>
+                    </div>
+
+                    {role === "viewer" && (
+                      <div className="flex items-center gap-2">
+                        {/* Quantity stepper */}
+                        <div className="flex items-center border border-brown/20 rounded-md overflow-hidden bg-softwhite">
+                          <button
+                            onClick={() =>
+                              setSouvenirs((prev) =>
+                                prev.map((it) =>
+                                  it.id === souvenir.id
+                                    ? {
+                                        ...it,
+                                        quantity: Math.max(
+                                          1,
+                                          Number(it.quantity) - 1
+                                        ),
+                                      }
+                                    : it
+                                )
+                              )
+                            }
+                            className="px-3 py-1 text-sm text-brown"
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            value={souvenir.quantity}
+                            onChange={(e) => {
+                              const val =
+                                e.target.value === ""
+                                  ? ""
+                                  : Math.max(1, Number(e.target.value));
+                              setSouvenirs((prev) =>
+                                prev.map((it) =>
+                                  it.id === souvenir.id
+                                    ? { ...it, quantity: val }
+                                    : it
+                                )
+                              );
+                            }}
+                            className="w-14 text-center text-sm outline-none py-1 bg-softwhite"
+                          />
+                          <button
+                            onClick={() =>
+                              setSouvenirs((prev) =>
+                                prev.map((it) =>
+                                  it.id === souvenir.id
+                                    ? {
+                                        ...it,
+                                        quantity:
+                                          Number(it.quantity || 1) + 1,
+                                      }
+                                    : it
+                                )
+                              )
+                            }
+                            className="px-3 py-1 text-sm text-brown"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => addToBasket(souvenir)}
+                          className="px-3 py-2 bg-brown text-softwhite rounded-md text-sm hover:bg-olive transition"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </article>
             );
           })}
         </div>
+
+        {/* empty state */}
+        {displayedSouvenirs.length === 0 && (
+          <div className="mt-12 text-center text-brown/60">
+            No souvenirs found for these filters.
+          </div>
+        )}
       </div>
 
-      {/* 🛒 Basket Drawer */}
+      {/* Basket Drawer */}
       {showBasket && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            width: 350,
-            height: "100%",
-            background: "#fff",
-            boxShadow: "-3px 0 8px rgba(0,0,0,0.2)",
-            padding: 20,
-            zIndex: 1000,
-          }}
-        >
-          <h3>Basket</h3>
+        <div className="fixed top-0 right-0 w-full sm:w-96 h-full bg-softwhite shadow-2xl p-5 z-40 flex flex-col border-l border-brown/20">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold text-brown">Basket</h3>
+            <button
+              onClick={() => setShowBasket(false)}
+              className="text-2xl text-brown/70 hover:text-brown"
+            >
+              ✖
+            </button>
+          </div>
 
-          <button
-            onClick={() => setShowBasket(false)}
-            style={{
-              position: "absolute",
-              top: 10,
-              right: 10,
-              fontSize: 18,
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-            }}
-          >
-            ✖
-          </button>
-
-          <ul>
-            {basket.map((item) => (
-              <li
-                key={item.id}
-                style={{ marginBottom: 12, borderBottom: "1px solid #ddd", paddingBottom: 8 }}
-              >
-                <strong>{item.name}</strong>
-                <br />
-                <input
-                  type="number"
-                  min={1}
-                  value={item.quantity}
-                  onChange={(e) =>
-                    updateBasketQuantity(item.id, parseInt(e.target.value))
-                  }
-                  style={{
-                    width: 50,
-                    padding: 3,
-                    borderRadius: 4,
-                    border: "1px solid #ccc",
-                    marginRight: 6,
-                  }}
-                />
-                x {item.price} ₪
-                <button
-                  onClick={() => removeFromBasket(item.id)}
-                  style={{
-                    marginLeft: 10,
-                    background: "red",
-                    color: "white",
-                    border: "none",
-                    borderRadius: 4,
-                    padding: "3px 6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="flex-1 overflow-y-auto">
+            {basket.length === 0 ? (
+              <p className="text-brown/60 text-center mt-10">
+                Your basket is empty
+              </p>
+            ) : (
+              <ul className="space-y-4">
+                {basket.map((item) => (
+                  <li key={item.id} className="flex items-center gap-3">
+                    <div className="w-14 h-14 bg-cream rounded overflow-hidden flex items-center justify-center">
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs text-brown/50">
+                          No image
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-brown">{item.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) =>
+                            updateBasketQuantity(
+                              item.id,
+                              Math.max(1, Number(e.target.value))
+                            )
+                          }
+                          className="w-16 p-1 border border-brown/20 rounded text-sm bg-softwhite"
+                        />
+                        <span className="text-sm text-brown/80">
+                          {Number(item.price).toFixed(2)} ₪
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => removeFromBasket(item.id)}
+                      className="text-xs bg-brown text-softwhite px-2 py-1 rounded hover:bg-olive transition"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {basket.length > 0 && (
-  <div style={{ marginTop: 10 }}>
-    <p>
-      <strong>
-        Subtotal:{" "}
-        {basket.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)} ₪
-      </strong>
-    </p>
-    <p>
-      <strong>
-        VAT (18%):{" "}
-        {(basket.reduce((sum, item) => sum + item.price * item.quantity, 0) * 0.18).toFixed(2)} ₪
-      </strong>
-    </p>
-    <p>
-      <strong>
-        Total:{" "}
-        {(basket.reduce((sum, item) => sum + item.price * item.quantity, 0) * 1.18).toFixed(2)} ₪
-      </strong>
-    </p>
-  </div>
-)}
+            <div className="mt-4 border-t border-brown/20 pt-4 space-y-2">
+              <p className="flex justify-between text-sm">
+                <span>Subtotal:</span>
+                <span>{subtotal.toFixed(2)} ₪</span>
+              </p>
+              <p className="flex justify-between text-sm">
+                <span>VAT (18%):</span>
+                <span>{vat.toFixed(2)} ₪</span>
+              </p>
+              <p className="flex justify-between font-semibold text-lg text-brown">
+                <span>Total:</span>
+                <span>{total.toFixed(2)} ₪</span>
+              </p>
 
-
-          <button
-            onClick={confirmOrder}
-            style={{
-              width: "100%",
-              background: "#4E342E",
-              color: "white",
-              padding: "10px 0",
-              borderRadius: 6,
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            Place Order
-          </button>
+              <button
+                onClick={confirmOrder}
+                className="w-full bg-brown hover:bg-olive text-softwhite py-2 rounded mt-3 transition"
+              >
+                Place Order
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Confirm Order Modal */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              padding: 20,
-              borderRadius: 8,
-              maxWidth: 400,
-              width: "100%",
-            }}
-          >
-            <h3>Confirm Order</h3>
-            <p>Are you sure you want to place this order?</p>
+      {/* Confirm modal */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-softwhite rounded-xl max-w-md w-full p-6 shadow-lg border border-brown/20">
+            <h3 className="text-lg font-semibold text-brown">
+              Confirm Order
+            </h3>
+            <p className="text-sm text-brown/70 mt-2">
+              You're about to place the following order:
+            </p>
 
-            <ul>
-              {basket.map((item) => (
-                <li key={item.id}>
-                  {item.name} x {item.quantity}
+            <ul className="mt-4 space-y-2 max-h-40 overflow-auto">
+              {basket.map((it) => (
+                <li
+                  key={it.id}
+                  className="flex items-center justify-between text-sm text-brown"
+                >
+                  <div>
+                    {it.name} x {it.quantity}
+                  </div>
+                  <div className="font-medium">
+                    {(Number(it.price) * Number(it.quantity)).toFixed(2)} ₪
+                  </div>
                 </li>
               ))}
             </ul>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginTop: 20,
-              }}
-            >
+            <div className="mt-4 flex items-center justify-between text-brown">
+              <div className="font-medium">Total</div>
+              <div className="font-semibold">{total.toFixed(2)} ₪</div>
+            </div>
+
+            <div className="mt-6 flex gap-3">
               <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                }}
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 py-2 border border-brown/30 rounded-md text-brown hover:bg-cream transition"
               >
                 Cancel
               </button>
-
               <button
                 onClick={placeOrder}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  border: "none",
-                  cursor: "pointer",
-                  background: "#4E342E",
-                  color: "white",
-                }}
+                className="flex-1 py-2 bg-olive text-softwhite rounded-md hover:bg-brown transition"
               >
                 Confirm
               </button>
@@ -468,13 +518,16 @@ onChange={(e) => {
         </div>
       )}
 
+      {/* Toast */}
       {message && (
-        <p style={{ marginTop: 10, textAlign: "center", color: "#333" }}>
-          {message}
-        </p>
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 bottom-8 z-50 px-4 py-2 rounded-md shadow-md text-softwhite ${
+            message.type === "success" ? "bg-olive" : "bg-red-600"
+          }`}
+        >
+          {message.text}
+        </div>
       )}
     </div>
   );
 }
-
-export default Catalog;
