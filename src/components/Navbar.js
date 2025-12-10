@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
 
 function Navbar() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [role, setRole] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -19,7 +17,8 @@ function Navbar() {
       const snap = await getDoc(ref);
 
       if (snap.exists()) {
-        setRole(snap.data().role);
+        const r = (snap.data().role || "").trim();
+        setRole(r);
       }
     };
 
@@ -32,106 +31,112 @@ function Navbar() {
   };
 
   return (
-    <nav className="bg-olive text-softwhite px-6 py-4 shadow-md">
-      <div className="max-w-7xl mx-auto flex justify-between items-center">
-
-        {/* Brand */}
-        <Link to="/" className="text-xl font-bold tracking-wide hover:opacity-85">
-          OL OliveLine
+    <nav className="bg-[#708238] text-[#FAF9F6] shadow-md">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        {/* Logo / Brand */}
+        <Link to="/catalog" className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full border border-[#FAF9F6]/60 flex items-center justify-center text-xs font-bold">
+            OL
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="font-semibold tracking-wide text-sm">
+              OliveLine
+            </span>
+            <span className="text-[11px] text-[#FAF9F6]/80">
+              B2B Olivewood Supply
+            </span>
+          </div>
         </Link>
 
-        {/* Desktop Menu */}
-        <div className="hidden md:flex gap-6 items-center">
-
+        {/* Links */}
+        <div className="flex items-center gap-4 text-sm">
+          {/* Admin links */}
           {role === "admin" && (
-            <Link
-              to="/dashboard"
-              className={`hover:text-cream transition ${
-                location.pathname === "/dashboard" ? "underline" : ""
-              }`}
-            >
-              Dashboard
-            </Link>
+            <>
+              <Link
+                to="/dashboard"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Dashboard
+              </Link>
+                <Link to="/admin-customers" className="hover:text-[#EDE6D6] transition-colors">
+      Customers
+    </Link>
+              <Link
+                to="/orders"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Orders
+              </Link>
+              <Link
+      to="/admin-order-approval"
+      className="hover:text-[#EDE6D6] transition-colors"
+    >
+      Approvals
+    </Link>
+              <Link
+                to="/admin-add-user"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Add User
+              </Link>
+              <Link
+                to="/catalog"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Catalog
+              </Link>
+            </>
           )}
 
-          {role === "admin" && (
-            <Link
-              to="/admin-add-user"
-              className={`hover:text-cream transition ${
-                location.pathname === "/admin-add-user" ? "underline" : ""
-              }`}
-            >
-              Add User
-            </Link>
+          {/* Viewer links */}
+          {role === "viewer" && (
+            <>
+              <Link
+                to="/catalog"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Catalog
+              </Link>
+                <Link to="/my-orders" className="hover:text-[#EDE6D6] transition-colors">
+    My Orders
+  </Link>
+              <Link
+                to="/customerprofile"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Customer Card
+              </Link>
+            </>
           )}
-{role === "admin" && (
-              <Link to="/orders" className="hover:text-olive">Orders</Link>
-            )}
-          <Link
-            to="/catalog"
-            className={`hover:text-cream transition ${
-              location.pathname === "/catalog" ? "underline" : ""
-            }`}
-          >
-            Catalog
-          </Link>
 
+          {/* Editor (if you want something in between) */}
+          {role === "editor" && (
+            <>
+              <Link
+                to="/catalog"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Catalog
+              </Link>
+              <Link
+                to="/orders"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Orders
+              </Link>
+            </>
+          )}
+
+          {/* Logout */}
           <button
             onClick={handleLogout}
-            className="bg-softwhite text-olive px-4 py-1 rounded-md hover:bg-cream shadow transition"
+            className="ml-2 px-3 py-1.5 rounded-md bg-[#FAF9F6] text-[#708238] text-sm font-semibold hover:bg-[#EDE6D6] transition-colors"
           >
             Logout
           </button>
         </div>
-
-        {/* Mobile Hamburger */}
-        <button
-          className="md:hidden text-softwhite"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          {menuOpen ? (
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          )}
-        </button>
       </div>
-
-      {/* Mobile Menu */}
-      {menuOpen && (
-        <div className="md:hidden mt-3 flex flex-col gap-3 bg-cream text-brown p-4 rounded-lg shadow">
-
-          {role === "admin" && (
-            <Link to="/dashboard" className="hover:text-olive">
-              Dashboard
-            </Link>
-          )}
-
-          {role === "admin" && (
-            <Link to="/admin-add-user" className="hover:text-olive">
-              Add User
-            </Link>
-          )}
-            {role === "admin" && (
-              <Link to="/orders" className="hover:text-olive">Orders</Link>
-            )}
-
-          <Link to="/catalog" className="hover:text-olive">
-            Catalog
-          </Link>
-
-          <button
-            onClick={handleLogout}
-            className="bg-softwhite text-olive px-4 py-1 rounded-md hover:bg-brown hover:text-softwhite transition"
-          >
-            Logout
-          </button>
-        </div>
-      )}
     </nav>
   );
 }
