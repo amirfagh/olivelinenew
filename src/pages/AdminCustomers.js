@@ -21,12 +21,14 @@ const formatDate = (ts) => {
   }
 };
 
-// Calculate total order value
+// Calculate total order value (new structure first, fallback to items)
 const getOrderTotal = (order) =>
+  order?.totals?.total ??
   order.items?.reduce(
     (sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0),
     0
-  ) || 0;
+  ) ??
+  0;
 
 export default function AdminCustomers() {
   const [customers, setCustomers] = useState([]);
@@ -52,9 +54,10 @@ export default function AdminCustomers() {
     setSelectedCustomer(cust);
     setDrawerOpen(true);
 
+    // ✅ NEW: orders are linked by customerId (doc id in customers)
     const qOrders = query(
       collection(db, "orders"),
-      where("userId", "==", cust.id)
+      where("customerId", "==", cust.id)
     );
 
     const snap = await getDocs(qOrders);
@@ -110,15 +113,20 @@ export default function AdminCustomers() {
     const rows = selectedOrders.map((o) => ({
       Order_ID: o.id,
       Order_Last6: o.id.slice(-6),
-      Status: o.status || "",
+      Status: o.status || o.stage || "",
       Created: formatDate(o.createdAt),
       Total: getOrderTotal(o).toFixed(2) + " ₪",
-      Price_Offer_File: o.priceOfferURL || "",
+
+      // ✅ NEW documents structure
+      PriceOffer_Draft_URL: o.documents?.offerDraft?.url || "",
+      PriceOffer_Signed_URL: o.documents?.offerSigned?.url || "",
+
       Items: o.items
         ?.map(
           (it) =>
-            `${it.name} x${it.quantity} = ${(Number(it.price || 0) *
-              Number(it.quantity || 0)).toFixed(2)}₪`
+            `${it.name} x${it.quantity} = ${(
+              Number(it.price || 0) * Number(it.quantity || 0)
+            ).toFixed(2)}₪`
         )
         .join(" | "),
     }));
@@ -155,8 +163,8 @@ export default function AdminCustomers() {
     return last6.includes(orderSearch.toLowerCase());
   });
 
-  const activeOrders = filteredOrders.filter((o) => o.status !== "done");
-  const doneOrders = filteredOrders.filter((o) => o.status === "done");
+  const activeOrders = filteredOrders.filter((o) => (o.status || o.stage) !== "done");
+  const doneOrders = filteredOrders.filter((o) => (o.status || o.stage) === "done");
 
   // Status badge classes
   const statusBadgeClass = (status) => {
@@ -165,6 +173,7 @@ export default function AdminCustomers() {
         return "bg-yellow-100 text-yellow-800 border-yellow-300";
       case "offerAccepted":
       case "accepted":
+      case "awaitingAdminApproval":
         return "bg-emerald-100 text-emerald-800 border-emerald-300";
       case "preparing":
         return "bg-blue-100 text-blue-800 border-blue-300";
@@ -228,9 +237,7 @@ export default function AdminCustomers() {
               </p>
               <p className="text-sm text-gray-700 mt-1">
                 Contact:{" "}
-                <span className="font-medium">
-                  {cust.contactName || "-"}
-                </span>{" "}
+                <span className="font-medium">{cust.contactName || "-"}</span>{" "}
                 {cust.contactPhone ? `• ${cust.contactPhone}` : ""}
               </p>
               <p className="text-sm text-gray-600 mt-1">
@@ -324,104 +331,9 @@ export default function AdminCustomers() {
                 )}
 
                 <div className="space-y-3">
-                  {activeOrders.map((o) => (
-                    <div
-                      key={o.id}
-                      className="bg-white border border-gray-200 rounded-lg p-3"
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="text-sm font-semibold text-[#4E342E]">
-                            Order #{o.id.slice(-6)}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            Full ID: {o.id}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            Created: {formatDate(o.createdAt)}
-                          </div>
-                        </div>
-
-                        <div className="text-right space-y-1">
-                          <span
-                            className={
-                              "inline-block px-2 py-1 text-[11px] rounded-full border " +
-                              statusBadgeClass(o.status)
-                            }
-                          >
-                            {o.status || "unknown"}
-                          </span>
-                          <div className="text-sm font-semibold text-[#708238]">
-                            {getOrderTotal(o).toFixed(2)} ₪
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* items */}
-                      <ul className="mt-2 text-xs text-gray-700 space-y-1">
-                        {o.items?.map((it) => (
-                          <li
-                            key={it.id}
-                            className="flex justify-between border-b border-dashed border-gray-200 pb-0.5"
-                          >
-                            <span>
-                              {it.name}{" "}
-                              <span className="text-gray-400">
-                                × {it.quantity}
-                              </span>
-                            </span>
-                            <span>
-                              {(Number(it.price || 0) *
-                                Number(it.quantity || 0)
-                              ).toFixed(2)}{" "}
-                              ₪
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      {o.priceOfferURL && (
-                        <div className="mt-2 text-xs">
-                          <a
-                            href={o.priceOfferURL}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-[#708238] hover:text-[#4E342E] underline"
-                          >
-                            View price offer file
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Completed (Done) orders - collapsible */}
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowDone((prev) => !prev)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-[#EDE6D6] rounded-md border border-[#4E342E]/20 text-sm font-semibold text-[#4E342E]"
-                >
-                  <span>
-                    Completed Orders (Done){" "}
-                    {doneOrders.length > 0 && `• ${doneOrders.length}`}
-                  </span>
-                  <span className="text-xs">
-                    {showDone ? "Hide ▲" : "Show ▼"}
-                  </span>
-                </button>
-
-                {showDone && (
-                  <div className="mt-2 space-y-3">
-                    {doneOrders.length === 0 && (
-                      <p className="text-xs text-gray-500">
-                        No completed orders to display.
-                      </p>
-                    )}
-
-                    {doneOrders.map((o) => (
+                  {activeOrders.map((o) => {
+                    const status = o.status || o.stage || "unknown";
+                    return (
                       <div
                         key={o.id}
                         className="bg-white border border-gray-200 rounded-lg p-3"
@@ -443,10 +355,10 @@ export default function AdminCustomers() {
                             <span
                               className={
                                 "inline-block px-2 py-1 text-[11px] rounded-full border " +
-                                statusBadgeClass(o.status)
+                                statusBadgeClass(status)
                               }
                             >
-                              {o.status || "done"}
+                              {status}
                             </span>
                             <div className="text-sm font-semibold text-[#708238]">
                               {getOrderTotal(o).toFixed(2)} ₪
@@ -468,7 +380,8 @@ export default function AdminCustomers() {
                                 </span>
                               </span>
                               <span>
-                                {(Number(it.price || 0) *
+                                {(
+                                  Number(it.price || 0) *
                                   Number(it.quantity || 0)
                                 ).toFixed(2)}{" "}
                                 ₪
@@ -477,28 +390,157 @@ export default function AdminCustomers() {
                           ))}
                         </ul>
 
-                        {o.priceOfferURL && (
-                          <div className="mt-2 text-xs">
-                            <a
-                              href={o.priceOfferURL}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-[#708238] hover:text-[#4E342E] underline"
-                            >
-                              View price offer file
-                            </a>
-                          </div>
-                        )}
+                        {/* ✅ NEW: price offer draft / signed links */}
+                        <div className="mt-2 text-xs space-y-1">
+                          {o.documents?.offerDraft?.url && (
+                            <div>
+                              <a
+                                href={o.documents.offerDraft.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[#708238] hover:text-[#4E342E] underline"
+                              >
+                                View price offer draft (unsigned)
+                              </a>
+                            </div>
+                          )}
+
+                          {o.documents?.offerSigned?.url && (
+                            <div>
+                              <a
+                                href={o.documents.offerSigned.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[#708238] hover:text-[#4E342E] underline"
+                              >
+                                View signed price offer
+                              </a>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    ))}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Completed (Done) orders - collapsible */}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDone((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-3 py-2 bg-[#EDE6D6] rounded-md border border-[#4E342E]/20 text-sm font-semibold text-[#4E342E]"
+                >
+                  <span>
+                    Completed Orders (Done){" "}
+                    {doneOrders.length > 0 && `• ${doneOrders.length}`}
+                  </span>
+                  <span className="text-xs">{showDone ? "Hide ▲" : "Show ▼"}</span>
+                </button>
+
+                {showDone && (
+                  <div className="mt-2 space-y-3">
+                    {doneOrders.length === 0 && (
+                      <p className="text-xs text-gray-500">
+                        No completed orders to display.
+                      </p>
+                    )}
+
+                    {doneOrders.map((o) => {
+                      const status = o.status || o.stage || "done";
+                      return (
+                        <div
+                          key={o.id}
+                          className="bg-white border border-gray-200 rounded-lg p-3"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="text-sm font-semibold text-[#4E342E]">
+                                Order #{o.id.slice(-6)}
+                              </div>
+                              <div className="text-[11px] text-gray-500">
+                                Full ID: {o.id}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Created: {formatDate(o.createdAt)}
+                              </div>
+                            </div>
+
+                            <div className="text-right space-y-1">
+                              <span
+                                className={
+                                  "inline-block px-2 py-1 text-[11px] rounded-full border " +
+                                  statusBadgeClass(status)
+                                }
+                              >
+                                {status}
+                              </span>
+                              <div className="text-sm font-semibold text-[#708238]">
+                                {getOrderTotal(o).toFixed(2)} ₪
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* items */}
+                          <ul className="mt-2 text-xs text-gray-700 space-y-1">
+                            {o.items?.map((it) => (
+                              <li
+                                key={it.id}
+                                className="flex justify-between border-b border-dashed border-gray-200 pb-0.5"
+                              >
+                                <span>
+                                  {it.name}{" "}
+                                  <span className="text-gray-400">
+                                    × {it.quantity}
+                                  </span>
+                                </span>
+                                <span>
+                                  {(
+                                    Number(it.price || 0) *
+                                    Number(it.quantity || 0)
+                                  ).toFixed(2)}{" "}
+                                  ₪
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+
+                          {/* ✅ NEW links */}
+                          <div className="mt-2 text-xs space-y-1">
+                            {o.documents?.offerDraft?.url && (
+                              <div>
+                                <a
+                                  href={o.documents.offerDraft.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[#708238] hover:text-[#4E342E] underline"
+                                >
+                                  View price offer draft (unsigned)
+                                </a>
+                              </div>
+                            )}
+                            {o.documents?.offerSigned?.url && (
+                              <div>
+                                <a
+                                  href={o.documents.offerSigned.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[#708238] hover:text-[#4E342E] underline"
+                                >
+                                  View signed price offer
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
               {filteredOrders.length === 0 && (
-                <p className="text-xs text-gray-500">
-                  No orders match this search.
-                </p>
+                <p className="text-xs text-gray-500">No orders match this search.</p>
               )}
             </div>
           </div>

@@ -86,6 +86,12 @@ function Navbar() {
               >
                 Catalog
               </Link>
+              <Link
+                to="/Cusromer-add"
+                className="hover:text-[#EDE6D6] transition-colors"
+              >
+                Customer Add
+              </Link>
             </>
           )}
 
@@ -101,12 +107,7 @@ function Navbar() {
                 <Link to="/my-orders" className="hover:text-[#EDE6D6] transition-colors">
     My Orders
   </Link>
-              <Link
-                to="/customerprofile"
-                className="hover:text-[#EDE6D6] transition-colors"
-              >
-                Customer Card
-              </Link>
+              
             </>
           )}
 

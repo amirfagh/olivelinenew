@@ -7,17 +7,18 @@ import {
   query,
   where,
   doc,
+  getDoc,
   updateDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Navbar from "../components/Navbar";
 
+/* ---------- helpers ---------- */
 const formatDate = (ts) => {
   if (!ts) return "";
   try {
-    if (ts.seconds !== undefined) {
-      return new Date(ts.seconds * 1000).toLocaleString("he-IL");
-    }
+    if (ts.seconds) return new Date(ts.seconds * 1000).toLocaleString("he-IL");
     return new Date(ts).toLocaleString("he-IL");
   } catch {
     return "";
@@ -25,23 +26,44 @@ const formatDate = (ts) => {
 };
 
 const getOrderTotal = (order) =>
+  order.totals?.total ??
   order.items?.reduce(
-    (sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0),
+    (sum, it) => sum + Number(it.price) * Number(it.quantity),
     0
-  ) || 0;
+  ) ??
+  0;
 
+/* ---------- component ---------- */
 export default function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [uploadingId, setUploadingId] = useState(null);
-  const [message, setMessage] = useState(null); // {type,text}
+  const [message, setMessage] = useState(null);
+  const [customerId, setCustomerId] = useState(null);
 
+  /* ---------- fetch customerId ---------- */
   useEffect(() => {
-    const user = auth.currentUser;
-    if (!user) return;
+    const loadCustomerId = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
+
+      if (snap.exists()) {
+        setCustomerId(snap.data().customerId || null);
+      }
+    };
+
+    loadCustomerId();
+  }, []);
+
+  /* ---------- fetch orders ---------- */
+  useEffect(() => {
+    if (!customerId) return;
 
     const q = query(
       collection(db, "orders"),
-      where("userId", "==", user.uid)
+      where("customerId", "==", customerId)
     );
 
     const unsub = onSnapshot(q, (snap) => {
@@ -54,101 +76,111 @@ export default function MyOrders() {
     });
 
     return () => unsub();
-  }, []);
+  }, [customerId]);
 
-  const pushMessage = (text, type = "success", ms = 2500) => {
+  /* ---------- toast ---------- */
+  const pushMessage = (text, type = "success", ms = 3000) => {
     setMessage({ text, type });
     setTimeout(() => setMessage(null), ms);
   };
 
+  /* ---------- upload signed offer ---------- */
   const handleSignedUpload = async (orderId, file) => {
+    if (!file) return;
+
     try {
       setUploadingId(orderId);
 
-      const path = `signedPriceOffers/${orderId}/${Date.now()}_${file.name.replace(
+      const path = `priceOffers/${orderId}/signed_${Date.now()}_${file.name.replace(
         /\s+/g,
         "_"
       )}`;
+
       const storageRef = ref(storage, path);
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
 
-      const orderRef = doc(db, "orders", orderId);
-      await updateDoc(orderRef, {
-        signedPriceOfferURL: url,
-        signedPriceOfferPath: path,
+      await updateDoc(doc(db, "orders", orderId), {
+        "documents.offerSigned": {
+          url,
+          path,
+          uploadedAt: Timestamp.now(),
+        },
         status: "awaitingAdminApproval",
-        reuploadRequired: false,
+        stage: "approval",
+        updatedAt: Timestamp.now(),
       });
 
       pushMessage(
-        "Signed price offer uploaded. Waiting for admin approval.",
-        "success",
-        4000
+        "Signed price offer uploaded. Waiting for admin approval."
       );
     } catch (err) {
       console.error(err);
-      pushMessage("Error uploading file. Please try again.", "error");
+      pushMessage("Upload failed. Please try again.", "error");
     } finally {
       setUploadingId(null);
     }
   };
 
-  const renderStatusLabel = (status, reuploadRequired) => {
-    if (reuploadRequired) {
+  /* ---------- status label ---------- */
+  const renderStatusLabel = (order) => {
+    const rejected = order.approval?.rejectionCount > 0;
+
+    if (rejected && order.status === "pending") {
       return (
-        <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-red-100 text-red-800 border border-red-300">
+        <span className="px-2 py-1 rounded-full text-[11px] bg-red-100 text-red-800 border border-red-300">
           Needs reupload
         </span>
       );
     }
 
-    switch (status) {
+    switch (order.status) {
       case "pending":
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-yellow-100 text-yellow-800 border border-yellow-300">
+          <span className="px-2 py-1 rounded-full text-[11px] bg-yellow-100 text-yellow-800 border border-yellow-300">
             Waiting for your signature
           </span>
         );
       case "awaitingAdminApproval":
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-blue-100 text-blue-800 border border-blue-300">
+          <span className="px-2 py-1 rounded-full text-[11px] bg-blue-100 text-blue-800 border border-blue-300">
             Waiting for admin approval
           </span>
         );
       case "offerAccepted":
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-300">
+          <span className="px-2 py-1 rounded-full text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-300">
             Offer accepted
           </span>
         );
       case "preparing":
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-indigo-100 text-indigo-800 border border-indigo-300">
+          <span className="px-2 py-1 rounded-full text-[11px] bg-indigo-100 text-indigo-800 border border-indigo-300">
             Preparing
           </span>
         );
       case "delivery":
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-orange-100 text-orange-800 border border-orange-300">
+          <span className="px-2 py-1 rounded-full text-[11px] bg-orange-100 text-orange-800 border border-orange-300">
             In delivery
           </span>
         );
       case "done":
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-gray-200 text-gray-700 border border-gray-300">
+          <span className="px-2 py-1 rounded-full text-[11px] bg-gray-200 text-gray-700 border border-gray-300">
             Completed
           </span>
         );
       default:
         return (
-          <span className="inline-flex px-2 py-1 rounded-full text-[11px] bg-gray-100 text-gray-700 border border-gray-300">
-            {status || "unknown"}
+          <span className="px-2 py-1 rounded-full text-[11px] bg-gray-100 text-gray-700 border border-gray-300">
+            {order.status}
           </span>
         );
     }
   };
 
+  /* ---------- render ---------- */
   return (
     <div className="min-h-screen bg-[#EDE6D6]">
       <Navbar />
@@ -157,9 +189,6 @@ export default function MyOrders() {
         <h1 className="text-2xl font-bold text-[#4E342E] mb-4">
           My Orders
         </h1>
-        <p className="text-sm text-gray-700 mb-6">
-          View your orders, download price offers, and upload signed documents.
-        </p>
 
         {orders.length === 0 ? (
           <p className="text-gray-500">You have no orders yet.</p>
@@ -173,16 +202,14 @@ export default function MyOrders() {
                   (a.createdAt?.seconds || 0)
               )
               .map((o) => {
-                const total = getOrderTotal(o);
-                const canUploadSigned =
-                  o.status === "pending" || o.reuploadRequired;
+                const canUpload = o.status === "pending";
 
                 return (
                   <div
                     key={o.id}
                     className="bg-[#FAF9F6] border border-[#4E342E]/10 rounded-lg p-4 shadow-sm"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex justify-between items-start">
                       <div>
                         <div className="text-sm font-semibold text-[#4E342E]">
                           Order #{o.id.slice(-6)}
@@ -192,97 +219,81 @@ export default function MyOrders() {
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1">
-                        {renderStatusLabel(o.status, o.reuploadRequired)}
-                        <div className="text-sm font-semibold text-[#708238]">
-                          {total.toFixed(2)} ₪
+                      <div className="text-right">
+                        {renderStatusLabel(o)}
+                        <div className="text-sm font-semibold text-[#708238] mt-1">
+                          {getOrderTotal(o).toFixed(2)} ₪
                         </div>
                       </div>
                     </div>
 
-                    {/* items */}
                     <ul className="mt-3 text-xs text-gray-700 space-y-1">
-                      {o.items?.map((it) => (
+                      {o.items.map((it) => (
                         <li
-                          key={it.id}
+                          key={it.productId}
                           className="flex justify-between border-b border-dashed border-gray-200 pb-0.5"
                         >
                           <span>
-                            {it.name}{" "}
-                            <span className="text-gray-400">
-                              × {it.quantity}
-                            </span>
+                            {it.name} × {it.quantity}
                           </span>
                           <span>
-                            {(Number(it.price || 0) *
-                              Number(it.quantity || 0)
-                            ).toFixed(2)}{" "}
-                            ₪
+                            {(it.price * it.quantity).toFixed(2)} ₪
                           </span>
                         </li>
                       ))}
                     </ul>
 
-                    {/* Price offer download/upload */}
-                    <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                      <div className="text-xs text-gray-600">
-                        {o.priceOfferDraftURL ? (
+                    <div className="mt-4 flex flex-col sm:flex-row sm:justify-between gap-3">
+                      <div className="text-xs">
+                        {o.documents?.offerDraft?.url && (
                           <a
-                            href={o.priceOfferDraftURL}
+                            href={o.documents.offerDraft.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[#708238] hover:text-[#4E342E] underline"
+                            className="text-[#708238] underline"
                           >
-                            Download price offer (unsigned)
+                            Download price offer
                           </a>
-                        ) : (
-                          <span className="text-gray-400">
-                            Price offer not available yet.
-                          </span>
                         )}
 
-                        {o.signedPriceOfferURL && (
+                        {o.documents?.offerSigned?.url && (
                           <div className="mt-1">
                             <a
-                              href={o.signedPriceOfferURL}
+                              href={o.documents.offerSigned.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[#708238] hover:text-[#4E342E] underline"
+                              className="text-[#708238] underline"
                             >
-                              View your signed price offer
+                              View signed offer
                             </a>
                           </div>
                         )}
 
-                        {o.reuploadRequired && (
+                        {o.approval?.rejectionCount > 0 && (
                           <div className="mt-1 text-red-600 text-[11px]">
-                            Admin requested a new signed price offer.
+                            Admin requested a new signed offer
                           </div>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        {canUploadSigned && (
-                          <label className="inline-flex items-center gap-2 text-xs cursor-pointer">
-                            <span className="px-3 py-2 bg-[#EDE6D6] border border-[#4E342E]/20 rounded-md hover:bg-[#e3dac8]">
-                              {uploadingId === o.id
-                                ? "Uploading..."
-                                : "Upload signed offer"}
-                            </span>
-                            <input
-                              type="file"
-                              accept="application/pdf,image/*"
-                              className="hidden"
-                              disabled={uploadingId === o.id}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                handleSignedUpload(o.id, file);
-                              }}
-                            />
-                          </label>
-                        )}
-                      </div>
+                      {canUpload && (
+                        <label className="cursor-pointer text-xs">
+                          <span className="px-3 py-2 bg-[#EDE6D6] border border-[#4E342E]/20 rounded-md">
+                            {uploadingId === o.id
+                              ? "Uploading..."
+                              : "Upload signed offer"}
+                          </span>
+                          <input
+                            type="file"
+                            accept="application/pdf,image/*"
+                            className="hidden"
+                            disabled={uploadingId === o.id}
+                            onChange={(e) =>
+                              handleSignedUpload(o.id, e.target.files?.[0])
+                            }
+                          />
+                        </label>
+                      )}
                     </div>
                   </div>
                 );
@@ -291,10 +302,9 @@ export default function MyOrders() {
         )}
       </div>
 
-      {/* Toast */}
       {message && (
         <div
-          className={`fixed left-1/2 -translate-x-1/2 bottom-8 z-50 px-4 py-2 rounded-md shadow-md ${
+          className={`fixed left-1/2 -translate-x-1/2 bottom-8 px-4 py-2 rounded-md shadow-md ${
             message.type === "success"
               ? "bg-[#708238] text-white"
               : "bg-red-600 text-white"

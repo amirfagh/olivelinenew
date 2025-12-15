@@ -25,41 +25,33 @@ export default function Catalog() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [priceSort, setPriceSort] = useState("");
   const [basket, setBasket] = useState([]);
-  const [message, setMessage] = useState(null); // { type, text }
+  const [message, setMessage] = useState(null);
   const [role, setRole] = useState(null);
-  const [customerDoc, setCustomerDoc] = useState(null);
+  const [customerId, setCustomerId] = useState(null);
 
   const [showBasket, setShowBasket] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Fetch role & customer info
+  // 🔑 Fetch role + customerId from users collection
   useEffect(() => {
-    const fetchRoleAndCustomer = async () => {
+    const fetchUserContext = async () => {
       const user = auth.currentUser;
       if (!user) return;
 
-      try {
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          setRole((userSnap.data().role || "").trim());
-        }
+      const userRef = doc(db, "users", user.uid);
+      const snap = await getDoc(userRef);
 
-        // Customer account doc (id = userId)
-        const custRef = doc(db, "customers", user.uid);
-        const custSnap = await getDoc(custRef);
-        if (custSnap.exists()) {
-          setCustomerDoc({ id: custSnap.id, ...custSnap.data() });
-        }
-      } catch (e) {
-        console.error("Error fetching role/customer:", e);
+      if (snap.exists()) {
+        const data = snap.data();
+        setRole((data.role || "").trim());
+        setCustomerId(data.customerId || null);
       }
     };
 
-    fetchRoleAndCustomer();
+    fetchUserContext();
   }, []);
 
-  // Firestore listeners for categories & souvenirs
+  // Categories & souvenirs
   useEffect(() => {
     const unsubCats = onSnapshot(collection(db, "categories"), (snap) =>
       setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -96,15 +88,12 @@ export default function Catalog() {
     setTimeout(() => setMessage(null), ms);
   };
 
-  // Add to basket
   const addToBasket = (souvenir) => {
     const existing = basket.find((item) => item.id === souvenir.id);
 
-    const image = souvenir.imageURL
-      ? souvenir.imageURL
-      : souvenir.images && souvenir.images.length > 0
-      ? souvenir.images[0].url
-      : null;
+    const image =
+      souvenir.imageURL ||
+      (souvenir.images?.length ? souvenir.images[0].url : null);
 
     const itemToAdd = { ...souvenir, image };
 
@@ -120,7 +109,7 @@ export default function Catalog() {
       setBasket((prev) => [...prev, itemToAdd]);
     }
 
-    pushMessage(`${souvenir.name} added to basket!`, "success");
+    pushMessage(`${souvenir.name} added to basket!`);
   };
 
   const updateBasketQuantity = (id, qty) => {
@@ -143,7 +132,7 @@ export default function Catalog() {
 
   const confirmOrder = () => {
     if (!auth.currentUser) {
-      pushMessage("You must be signed in to place an order", "error");
+      pushMessage("You must be signed in", "error");
       return;
     }
     if (basket.length === 0) {
@@ -154,140 +143,102 @@ export default function Catalog() {
     setShowBasket(false);
   };
 
-  // Generate price-offer PDF (unsigned) for this order
+  // PDF generator (unchanged UI-wise)
   const generatePriceOfferPdfBlob = (orderData) => {
-    const docPdf = new jsPDF();
+    const pdf = new jsPDF();
+    pdf.setFontSize(18);
+    pdf.text("OliveLine - Price Offer", 20, 20);
+    pdf.setFontSize(11);
 
-    // Header
-    docPdf.setFontSize(18);
-    docPdf.setTextColor(78, 52, 46); // BROWN
-    docPdf.text("OliveLine - Price Offer", 20, 20);
+    pdf.text(`Date: ${new Date().toLocaleDateString("he-IL")}`, 20, 32);
+    pdf.text(`Customer Email: ${orderData.customerEmail}`, 20, 40);
 
-    docPdf.setFontSize(11);
-    docPdf.setTextColor(0, 0, 0);
-
-    const customerName =
-      customerDoc?.companyName || customerDoc?.contactName || "";
-    const customerReg = customerDoc?.registrationNumber || "";
-    const customerAddress = `${customerDoc?.city || ""} ${
-      customerDoc?.address || ""
-    }`;
-
-    docPdf.text(`Date: ${new Date().toLocaleDateString("he-IL")}`, 20, 30);
-    docPdf.text(`Customer: ${customerName}`, 20, 38);
-    if (customerReg) docPdf.text(`Registration No.: ${customerReg}`, 20, 46);
-    if (customerAddress) docPdf.text(`Address: ${customerAddress}`, 20, 54);
-    docPdf.text(`Contact Email: ${orderData.userEmail || ""}`, 20, 62);
-
-    // Items table
-    let y = 75;
-    docPdf.setFontSize(12);
-    docPdf.text("Items:", 20, y);
-    y += 8;
-
-    docPdf.setFontSize(10);
-    docPdf.text("Name", 20, y);
-    docPdf.text("Qty", 100, y);
-    docPdf.text("Price", 120, y);
-    docPdf.text("Total", 150, y);
-    y += 6;
+    let y = 60;
+    pdf.text("Items:", 20, y);
+    y += 10;
 
     orderData.items.forEach((item) => {
-      docPdf.text(String(item.name), 20, y);
-      docPdf.text(String(item.quantity), 100, y);
-      docPdf.text(`${Number(item.price).toFixed(2)} NIS`, 120, y);
-      docPdf.text(
-        `${(Number(item.price) * Number(item.quantity)).toFixed(2)} NIS`,
-        150,
+      pdf.text(
+        `${item.name} x${item.quantity} — ${(item.price * item.quantity).toFixed(
+          2
+        )} ₪`,
+        20,
         y
       );
       y += 6;
     });
 
-    y += 4;
-    docPdf.text(
-      `Subtotal: ${subtotal.toFixed(2)} NIS`,
-      120,
-      y
-    );
+    y += 8;
+    pdf.text(`Subtotal: ${subtotal.toFixed(2)} ₪`, 20, y);
     y += 6;
-    docPdf.text(
-      `VAT (18%): ${vat.toFixed(2)} NIS`,
-      120,
-      y
-    );
+    pdf.text(`VAT (18%): ${vat.toFixed(2)} ₪`, 20, y);
     y += 6;
-    docPdf.setFontSize(12);
-    docPdf.text(
-      `Total: ${total.toFixed(2)} NIS`,
-      120,
-      y
-    );
+    pdf.text(`Total: ${total.toFixed(2)} ₪`, 20, y);
 
     y += 15;
-    docPdf.setFontSize(10);
-    docPdf.text("Please sign and stamp this offer and return it to us.", 20, y);
+    pdf.text("Signature: ____________________", 20, y);
     y += 6;
-    docPdf.text("Signature: _______________________", 20, y);
-    y += 6;
-    docPdf.text("Stamp: ___________________________", 20, y);
+    pdf.text("Stamp: _______________________", 20, y);
 
-    const pdfBlob = docPdf.output("blob");
-    return pdfBlob;
+    return pdf.output("blob");
   };
 
   const placeOrder = async () => {
-    if (!auth.currentUser) {
-      pushMessage("You must be signed in to place an order", "error");
-      return;
-    }
-    if (basket.length === 0) {
-      pushMessage("Your basket is empty", "error");
-      return;
-    }
-
     try {
-      const orderData = {
-        userId: auth.currentUser.uid,
-        userEmail: auth.currentUser.email,
-        items: basket.map(({ id, name, price, quantity }) => ({
-          id,
-          name,
-          price,
-          quantity,
-        })),
-        status: "pending", // waiting for customer to sign price offer
+      const items = basket.map((b) => ({
+        productId: b.id,
+        name: b.name,
+        price: Number(b.price),
+        quantity: Number(b.quantity),
+      }));
+
+      const orderPayload = {
+        customerId: customerId || null,
+        createdBy: auth.currentUser.uid,
+        customerEmail: auth.currentUser.email,
+        items,
+        status: "pending",
+        stage: "offer",
+        totals: {
+          subtotal,
+          vat,
+          total,
+        },
+        documents: {
+          offerDraft: {},
+          offerSigned: {},
+        },
         createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
       };
 
-      const orderRef = await addDoc(collection(db, "orders"), orderData);
+      const orderRef = await addDoc(collection(db, "orders"), orderPayload);
 
-      // Generate & upload price-offer PDF
-      const blob = generatePriceOfferPdfBlob(orderData);
-      const path = `priceOffersDraft/${orderRef.id}/price_offer.pdf`;
-      const storageRef = ref(storage, path);
-      await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(storageRef);
+      const pdfBlob = generatePriceOfferPdfBlob(orderPayload);
+      const pdfPath = `priceOffers/${orderRef.id}/price_offer.pdf`;
+
+      const pdfRef = ref(storage, pdfPath);
+      await uploadBytes(pdfRef, pdfBlob);
+      const pdfURL = await getDownloadURL(pdfRef);
 
       await updateDoc(orderRef, {
-        priceOfferDraftURL: url,
-        priceOfferDraftPath: path,
+        "documents.offerDraft": {
+          url: pdfURL,
+          path: pdfPath,
+          createdAt: Timestamp.now(),
+        },
       });
 
       setBasket([]);
       setShowConfirm(false);
-      pushMessage(
-        "Order placed. Price offer is ready in 'My Orders' for signature.",
-        "success",
-        4000
-      );
+      pushMessage("Order placed. Price offer generated.", "success", 4000);
     } catch (err) {
       console.error(err);
-      pushMessage("Error placing order. Please try again.", "error");
+      pushMessage("Failed to place order", "error");
     }
   };
 
-  return (
+   return (
     <div className="min-h-screen" style={{ backgroundColor: CREAM }}>
       <Navbar />
 

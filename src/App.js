@@ -10,6 +10,7 @@ import CustomerProfile from "./pages/CustomerProfile";
 import AdminCustomers from "./pages/AdminCustomers";
 import MyOrders from "./pages/MyOrders";
 import AdminOrderApproval from "./pages/AdminOrderApproval";
+import CustomerAdd from "./pages/AdminCreateCustomer";
 function App() {
   return (
     <Router>
@@ -48,6 +49,14 @@ function App() {
   path="/Admin-order-approval"
   element={
     <RequireAdmin><AdminOrderApproval /></RequireAdmin>
+      
+    
+  }
+/>
+<Route
+  path="/Cusromer-add"
+  element={
+    <RequireAdmin><CustomerAdd /></RequireAdmin>
       
     
   }

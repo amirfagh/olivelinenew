@@ -1,74 +1,98 @@
+// Login.js
 import React from "react";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, provider, db } from "../firebase/firebase";
 import { useNavigate } from "react-router-dom";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 
-function Login() {
+const OLIVE = "#708238";
+const CREAM = "#EDE6D6";
+const BROWN = "#4E342E";
+
+export default function Login() {
   const navigate = useNavigate();
 
   const handleLogin = async () => {
-  try {
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
 
-    // Check allowlist
-    const email = user.email.toLowerCase();
-    const allowRef = doc(db, "allowedUsers", email);
-    const allowSnap = await getDoc(allowRef);
+      if (!user?.email) {
+        await signOut(auth);
+        alert("Login failed. No email found.");
+        return;
+      }
 
-    // If NOT allowed → block login
-    if (!allowSnap.exists()) {
-      alert("Your account is not authorized. Please contact the administrator.");
-      await auth.signOut();
-      return;
+      const email = user.email.toLowerCase();
+
+      // 1️⃣ Check allowlist
+      const allowRef = doc(db, "allowedUsers", email);
+      const allowSnap = await getDoc(allowRef);
+
+      if (!allowSnap.exists()) {
+        await signOut(auth);
+        alert("Your account is not authorized. Please contact OliveLine.");
+        return;
+      }
+
+      const { role, customerId = null } = allowSnap.data();
+
+      // 2️⃣ Create / update user doc
+      const userRef = doc(db, "users", user.uid);
+
+      await setDoc(
+        userRef,
+        {
+          name: user.displayName || "",
+          email: user.email,
+          role,
+          customerId, // ✅ may be null for admins
+          lastLoginAt: Timestamp.now(),
+          createdAt: Timestamp.now(),
+        },
+        { merge: true }
+      );
+
+      // 3️⃣ Redirect
+      if (role === "admin") {
+        navigate("/catalog");
+      } else {
+        navigate("/catalog");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      alert("Login failed. Please try again.");
     }
-
-    // Get the role from the allowlist
-    const { role } = allowSnap.data();
-
-    // Create or update user doc
-    const userRef = doc(db, "users", user.uid);
-
-    await setDoc(userRef, {
-      name: user.displayName,
-      email: user.email,
-      role: role,      // Assign role from allowlist
-      createdAt: new Date()
-    }, { merge: true });
-
-    navigate("/catalog");
-
-  } catch (error) {
-    console.error("Login error:", error);
-  }
-};
-
+  };
 
   return (
     <div
       style={{
+        height: "100vh",
+        backgroundColor: CREAM,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        height: "100vh",
-        backgroundColor: "#EDE6D6",
       }}
     >
-      <h1 style={{ color: "#708238" }}>OL OliveLine</h1>
-      <p style={{ color: "#4E342E" }}>Holy Land Olive Wood Souvenirs</p>
+      <h1 style={{ color: OLIVE, fontSize: 32, fontWeight: "bold" }}>
+        OliveLine
+      </h1>
+      <p style={{ color: BROWN, marginBottom: 20 }}>
+        Holy Land Olive Wood Souvenirs
+      </p>
 
       <button
         onClick={handleLogin}
         style={{
-          backgroundColor: "#708238",
+          backgroundColor: OLIVE,
           color: "white",
+          padding: "12px 28px",
+          borderRadius: 8,
           border: "none",
-          padding: "12px 24px",
-          borderRadius: "8px",
+          fontSize: 16,
           cursor: "pointer",
-          marginTop: "10px",
         }}
       >
         Sign in with Google
@@ -76,5 +100,3 @@ function Login() {
     </div>
   );
 }
-
-export default Login;

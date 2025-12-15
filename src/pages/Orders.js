@@ -1,16 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { db, storage } from "../firebase/firebase";
+import { db } from "../firebase/firebase";
 import {
   collection,
   onSnapshot,
   updateDoc,
   doc,
 } from "firebase/firestore";
-import {
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
 import Navbar from "../components/Navbar";
 
 // ----------------------
@@ -22,33 +17,42 @@ const BROWN = "#4E342E";
 const SOFTWHITE = "#FAF9F6";
 
 // -------------------------------------------
-// STATUS DEFINITION (5 STAGES TOTAL)
+// STATUS DEFINITIONS (FULL FLOW)
 // -------------------------------------------
 const STATUS_STEPS = [
-  { key: "pending", label: "Pending" },
+  { key: "pending", label: "Pending (Customer Signature)" },
+  { key: "awaitingAdminApproval", label: "Awaiting Admin Approval" },
   { key: "offerAccepted", label: "Price Offer Accepted" },
   { key: "preparing", label: "Preparing Order" },
   { key: "delivery", label: "Out for Delivery" },
-  
+  { key: "done", label: "Completed" },
 ];
 
-// Get next status key
+// -------------------------------------------
+// GET NEXT STATUS
+// -------------------------------------------
 const getNextStatusKey = (current) => {
-  if (current === "pending") return null; // blocked until upload
-  if (current === "offerAccepted") return "preparing";
-  if (current === "preparing") return "delivery";
-  if (current === "delivery") return "done"; // final stage
-  return null;
+  switch (current) {
+    case "pending":
+      return null; // customer action only
+    case "awaitingAdminApproval":
+      return "offerAccepted";
+    case "offerAccepted":
+      return "preparing";
+    case "preparing":
+      return "delivery";
+    case "delivery":
+      return "done";
+    default:
+      return null;
+  }
 };
-
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
-  const [uploadingOrderId, setUploadingOrderId] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   // ------------------------
-  //  FETCH ORDERS
+  // FETCH ORDERS
   // ------------------------
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "orders"), (snap) => {
@@ -58,65 +62,29 @@ export default function Orders() {
   }, []);
 
   // ------------------------
-  //  UPLOAD PRICE OFFER (PDF + IMAGES)
-  // ------------------------
-  const uploadPriceOffer = async (orderId, file) => {
-    if (!file) return;
-
-    setUploadingOrderId(orderId);
-    setUploadProgress(0);
-
-    const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-    const path = `priceOffers/${orderId}/${filename}`;
-    const ref = storageRef(storage, path);
-    const uploadTask = uploadBytesResumable(ref, file);
-
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
-        const percent = Math.round(
-          (snapshot.bytesTransferred / snapshot.totalBytes) * 100
-        );
-        setUploadProgress(percent);
-      },
-      (error) => {
-        console.error("Upload error:", error);
-        setUploadingOrderId(null);
-      },
-      async () => {
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-
-        // SAVE IN FIRESTORE + MOVE TO NEXT STAGE
-        await updateDoc(doc(db, "orders", orderId), {
-          priceOfferURL: url,
-          priceOfferPath: path,
-          status: "offerAccepted",
-        });
-
-        setUploadingOrderId(null);
-        setUploadProgress(0);
-      }
-    );
-  };
-
-  // ------------------------
-  //  MOVE TO NEXT STATUS
+  // MOVE TO NEXT STATUS
   // ------------------------
   const moveToNextStatus = async (order) => {
-    const current = order.status;
-    const next = getNextStatusKey(current);
+    const next = getNextStatusKey(order.status);
     if (!next) return;
 
-    // ❌ BLOCK MOVING FROM PENDING
-    if (current === "pending") return;
+    // ❌ BLOCK admin approval if no signed offer
+    if (
+      order.status === "awaitingAdminApproval" &&
+      !order.documents?.offerSigned?.url
+    ) {
+      alert("Customer has not uploaded a signed price offer yet.");
+      return;
+    }
 
     try {
       await updateDoc(doc(db, "orders", order.id), {
         status: next,
+        updatedAt: new Date(),
       });
     } catch (err) {
-      console.error("Error updating status:", err);
-      alert("Error updating order status.");
+      console.error("Status update error:", err);
+      alert("Failed to update order status.");
     }
   };
 
@@ -125,144 +93,118 @@ export default function Orders() {
       <Navbar />
 
       <div className="max-w-7xl mx-auto p-8">
-        <h2
-          className="text-3xl font-bold mb-10"
-          style={{ color: BROWN }}
-        >
+        <h2 className="text-3xl font-bold mb-10" style={{ color: BROWN }}>
           Orders Management
         </h2>
 
-        {/* --- GRID: 5 STATUS COLUMNS --- */}
-       <div className="grid gap-6"
-     style={{ gridTemplateColumns: `repeat(${STATUS_STEPS.length}, minmax(300px, 1fr))` }}>
+        {/* --- GRID: ALL STATUSES VISIBLE --- */}
+<div
+  className="grid gap-4"
+  style={{
+    gridTemplateColumns: `repeat(${STATUS_STEPS.length}, minmax(180px, 1fr))`,
+  }}
+>
+  {STATUS_STEPS.map((status) => (
+    <div
+      key={status.key}
+      className="rounded-lg shadow-sm flex flex-col"
+      style={{ backgroundColor: SOFTWHITE }}
+    >
+      {/* COLUMN HEADER */}
+      <h3
+        className="text-sm font-semibold text-center py-2 border-b"
+        style={{ color: OLIVE }}
+      >
+        {status.label}
+      </h3>
 
-          {STATUS_STEPS.map((status) => (
+      {/* COLUMN CONTENT */}
+      <div className="space-y-2 flex-1 overflow-y-auto px-2 py-2">
+        {orders
+          .filter((o) => o.status === status.key)
+          .map((order) => (
             <div
-              key={status.key}
-              className="p-4 rounded-xl shadow-sm flex flex-col"
-              style={{ backgroundColor: SOFTWHITE }}
+              key={order.id}
+              className="rounded-md border p-2 bg-white"
             >
-              <h3
-                className="text-xl font-semibold mb-4 text-center"
+              {/* HEADER */}
+              <div className="flex justify-between items-center">
+                <span
+                  className="font-semibold text-xs"
+                  style={{ color: BROWN }}
+                >
+                  #{order.id.slice(-6)}
+                </span>
+                <span className="text-[10px] opacity-60">
+                  {order.createdAt?.seconds
+                    ? new Date(
+                        order.createdAt.seconds * 1000
+                      ).toLocaleDateString()
+                    : ""}
+                </span>
+              </div>
+
+              {/* ITEMS */}
+              <ul className="mt-1 text-[11px] space-y-[2px]">
+                {order.items?.map((item) => (
+                  <li
+                    key={item.productId}
+                    className="flex justify-between"
+                  >
+                    <span className="truncate max-w-[110px]">
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span>
+                      {(item.price * item.quantity).toFixed(0)}₪
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* TOTAL */}
+              <div
+                className="text-right text-xs font-semibold mt-1"
                 style={{ color: OLIVE }}
               >
-                {status.label}
-              </h3>
-
-              <div className="space-y-4 flex-1 overflow-y-auto pr-1">
-                {orders
-                  .filter((o) => o.status === status.key)
-                  .map((order) => (
-                    <div
-                      key={order.id}
-                      className="p-4 rounded-lg shadow"
-                      style={{ backgroundColor: "#ffffff" }}
-                    >
-                      <div className="flex justify-between items-center">
-                        <p className="font-semibold" style={{ color: BROWN }}>
-                          Order #{order.id.slice(-6)}
-                        </p>
-                        <span className="text-xs opacity-60">
-                          {new Date(
-                            order.createdAt?.seconds * 1000
-                          ).toLocaleDateString()}
-                        </span>
-                      </div>
-
-                      {/* Order items */}
-                      <ul className="text-sm mt-2 space-y-1">
-                        {order.items?.map((item) => (
-                          <li
-                            key={item.id}
-                            className="flex justify-between border-b pb-1"
-                          >
-                            <span>{item.name}</span>
-                            <span>
-                              {item.quantity} × {item.price} ₪
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      {/* TOTAL */}
-                      <div className="mt-3 text-right font-semibold" style={{ color: OLIVE }}>
-                        Total:{" "}
-                        {order.items
-                          ?.reduce(
-                            (sum, it) =>
-                              sum + Number(it.price) * Number(it.quantity),
-                            0
-                          )
-                          .toFixed(2)}{" "}
-                        ₪
-                      </div>
-
-                      {/* --- PENDING COLUMN: UPLOAD REQUIRED --- */}
-                      {status.key === "pending" && (
-                        <div className="mt-4">
-                          <label className="cursor-pointer">
-                            <input
-                              type="file"
-                              accept="application/pdf,image/*"
-                              onChange={(e) =>
-                                uploadPriceOffer(order.id, e.target.files[0])
-                              }
-                              className="hidden"
-                            />
-                            <div
-                              className="px-3 py-2 text-sm rounded-md text-center"
-                              style={{
-                                backgroundColor: OLIVE,
-                                color: SOFTWHITE,
-                              }}
-                            >
-                              Upload Price Offer
-                            </div>
-                          </label>
-
-                          {uploadingOrderId === order.id && (
-                            <div className="text-xs mt-2" style={{ color: OLIVE }}>
-                              Uploading… {uploadProgress}%
-                            </div>
-                          )}
-
-                          <p className="text-[11px] mt-2 text-center opacity-60">
-                            Cannot continue until file uploaded
-                          </p>
-                        </div>
-                      )}
-
-                      {/* --- OTHER COLUMNS: NEXT BUTTON --- */}
-                      {status.key !== "pending" &&
-                        status.key !== "done" && (
-                          <button
-                            onClick={() => moveToNextStatus(order)}
-                            className="w-full mt-4 flex items-center justify-center gap-1 text-sm rounded-md py-2 transition"
-                            style={{
-                              backgroundColor: OLIVE,
-                              color: SOFTWHITE,
-                            }}
-                          >
-                            <span>Next</span>
-                            <span className="text-xs">➜</span>
-                          </button>
-                        )}
-
-                      {/* DONE COLUMN MESSAGE */}
-                      {status.key === "done" && (
-                        <p
-                          className="text-center font-semibold mt-3"
-                          style={{ color: OLIVE }}
-                        >
-                          ✓ Completed
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                {order.totals?.total?.toFixed(0)} ₪
               </div>
+
+              {/* ACTIONS */}
+              {status.key !== "pending" &&
+                status.key !== "done" && (
+                  <button
+                    onClick={() => moveToNextStatus(order)}
+                    className="w-full mt-1 text-[11px] py-1 rounded"
+                    style={{
+                      backgroundColor: OLIVE,
+                      color: SOFTWHITE,
+                    }}
+                  >
+                    ➜ Next
+                  </button>
+                )}
+
+              {status.key === "pending" && (
+                <p className="text-[10px] text-center mt-1 opacity-60">
+                  Waiting for signature
+                </p>
+              )}
+
+              {status.key === "done" && (
+                <p
+                  className="text-[11px] text-center mt-1 font-semibold"
+                  style={{ color: OLIVE }}
+                >
+                  ✓ Done
+                </p>
+              )}
             </div>
           ))}
-        </div>
+      </div>
+    </div>
+  ))}
+</div>
+
       </div>
     </div>
   );
