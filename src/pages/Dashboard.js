@@ -4,6 +4,7 @@ import { db, storage } from "../firebase/firebase";
 import {
   collection,
   addDoc,
+  getDocs,
   deleteDoc,
   doc,
   updateDoc,
@@ -14,19 +15,21 @@ import {
   uploadBytesResumable,
   getDownloadURL,
   deleteObject,
-  listAll,
+  listAll
 } from "firebase/storage";
 import Navbar from "../components/Navbar";
 
 function Dashboard() {
   const [souvenirs, setSouvenirs] = useState([]);
   const [categories, setCategories] = useState([]);
+const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
 
+  // New category and new item form
   const [newCategory, setNewCategory] = useState("");
   const [newItem, setNewItem] = useState({
     name: "",
     manufacturer: "",
-    price: "",
+    buy: "",
     description: "",
     size: "",
     weight: "",
@@ -34,22 +37,26 @@ function Dashboard() {
     imageURL: "",
     categoryId: "",
     images: [],
+    tierPricing: [],
   });
-
   const [addFiles, setAddFiles] = useState([]);
+
+  // Edit modal
   const [editingId, setEditingId] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [editFiles, setEditFiles] = useState([]);
+
   const [uploadProgress, setUploadProgress] = useState({});
 
-  /* Fetch Categories + Souvenirs */
+  /* Fetch categories & souvenirs */
   useEffect(() => {
-    const unsubCats = onSnapshot(collection(db, "categories"), (snap) =>
-      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
-    const unsubSouvs = onSnapshot(collection(db, "souvenirs"), (snap) =>
-      setSouvenirs(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    );
+    const unsubCats = onSnapshot(collection(db, "categories"), (snap) => {
+      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+
+    const unsubSouvs = onSnapshot(collection(db, "souvenirs"), (snap) => {
+      setSouvenirs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
 
     return () => {
       unsubCats();
@@ -64,40 +71,39 @@ function Dashboard() {
     setNewCategory("");
   };
 
-  /* Upload Helper */
+  /* Upload files helper */
   const uploadFilesForSouvenir = async (souvenirId, files, prefix = "") => {
     if (!files || files.length === 0) return [];
-    const uploaded = [];
+    const uploadResults = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const filename = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+      const filename = `${Date.now()}_${i}_${file.name.replace(/\s+/g, "_")}`;
       const path = `souvenirs/${souvenirId}/${filename}`;
       const ref = storageRef(storage, path);
 
-      const task = uploadBytesResumable(ref, file);
+      const uploadTask = uploadBytesResumable(ref, file);
 
-      const url = await new Promise((resolve, reject) => {
-        task.on(
+      const p = new Promise((resolve, reject) => {
+        uploadTask.on(
           "state_changed",
-          (snap) => {
-            const progress = Math.round(
-              (snap.bytesTransferred / snap.totalBytes) * 100
-            );
+          (snapshot) => {
+            const percent = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
             setUploadProgress((prev) => ({
               ...prev,
-              [`${prefix}${filename}`]: progress,
+              [`${prefix}${filename}`]: percent,
             }));
           },
           reject,
           async () => {
-            const url = await getDownloadURL(task.snapshot.ref);
-            resolve(url);
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve({ url, path });
           }
         );
       });
 
-      uploaded.push({ url, path });
+      const result = await p;
+      uploadResults.push(result);
 
       setUploadProgress((prev) => {
         const copy = { ...prev };
@@ -106,31 +112,50 @@ function Dashboard() {
       });
     }
 
-    return uploaded;
+    return uploadResults;
   };
 
   /* Add Souvenir */
   const addSouvenir = async () => {
-    const required = ["name", "manufacturer", "price", "description", "size", "material", "categoryId"];
-    for (let key of required) {
-      if (!newItem[key]) return alert("Please fill all required fields.");
+    // REQUIRED FIELDS
+    if (
+      !newItem.name ||
+      !newItem.manufacturer ||
+      !newItem.buy ||
+      !newItem.description ||
+      !newItem.size ||
+      !newItem.material ||
+      !newItem.categoryId
+    ) {
+      alert("Please fill all required fields.");
+      return;
     }
 
     const docRef = await addDoc(collection(db, "souvenirs"), {
-      ...newItem,
-      createdAt: Date.now(),
+      name: newItem.name,
+      manufacturer: newItem.manufacturer,
+      buy: newItem.buy,
+      description: newItem.description,
+      size: newItem.size,
+      weight: newItem.weight || "",
+      material: newItem.material,
+      imageURL: newItem.imageURL || "",
+      categoryId: newItem.categoryId,
       images: [],
+       tierPricing: newItem.tierPricing || [],
+      createdAt: Date.now(),
     });
 
-    if (addFiles.length) {
-      const uploaded = await uploadFilesForSouvenir(docRef.id, addFiles, "add_");
+    const filesArray = Array.from(addFiles || []);
+    if (filesArray.length) {
+      const uploaded = await uploadFilesForSouvenir(docRef.id, filesArray, "add_");
       await updateDoc(doc(db, "souvenirs", docRef.id), { images: uploaded });
     }
 
     setNewItem({
       name: "",
       manufacturer: "",
-      price: "",
+      buy: "",
       description: "",
       size: "",
       weight: "",
@@ -138,210 +163,384 @@ function Dashboard() {
       imageURL: "",
       categoryId: "",
       images: [],
+        tierPricing: [],
     });
     setAddFiles([]);
   };
 
-  /* Edit Souvenir */
-  const startEdit = (s) => {
-    setEditingId(s.id);
-    setEditingItem({ ...s });
+  /* Delete souvenir */
+  const deleteSouvenir = async (id) => {
+    if (!window.confirm("Delete this souvenir?")) return;
+
+    try {
+      const listRef = storageRef(storage, `souvenirs/${id}`);
+      const res = await listAll(listRef);
+      await Promise.all(res.items.map((itemRef) => deleteObject(itemRef)));
+    } catch {}
+
+    await deleteDoc(doc(db, "souvenirs", id));
   };
 
+  /* Start Edit */
+  const startEdit = (s) => {
+    setEditingId(s.id);
+    setEditingItem({ ...s,  tierPricing: s.tierPricing || [], });
+    setEditFiles([]);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditingItem(null);
+    setEditFiles([]);
+  };
+
+  /* Save Edit */
   const saveEdit = async () => {
     if (!editingItem) return;
-    const ref = doc(db, "souvenirs", editingId);
 
-    await updateDoc(ref, {
+    const docRef = doc(db, "souvenirs", editingId);
+
+    await updateDoc(docRef, {
       name: editingItem.name,
       manufacturer: editingItem.manufacturer,
-      price: editingItem.price,
+      buy: editingItem.buy,
       description: editingItem.description,
       size: editingItem.size,
       weight: editingItem.weight || "",
       material: editingItem.material,
       imageURL: editingItem.imageURL || "",
       categoryId: editingItem.categoryId,
+       tierPricing: editingItem.tierPricing || [],
     });
 
-    if (editFiles.length) {
-      const uploaded = await uploadFilesForSouvenir(editingId, editFiles, "edit_");
-      await updateDoc(ref, {
+    const filesArray = Array.from(editFiles || []);
+    if (filesArray.length) {
+      const uploaded = await uploadFilesForSouvenir(editingId, filesArray, "edit_");
+      await updateDoc(docRef, {
         images: [...editingItem.images, ...uploaded],
       });
     }
 
-    setEditingId(null);
-    setEditingItem(null);
-    setEditFiles([]);
+    cancelEdit();
   };
 
-  /* Delete Image */
+  /* Delete single image */
   const deleteImageFromSouvenir = async (souvenirId, imageObj) => {
     if (!window.confirm("Delete this image?")) return;
-    await deleteObject(storageRef(storage, imageObj.path));
 
-    const s = souvenirs.find((x) => x.id === souvenirId);
-    const newImages = s.images.filter((img) => img.path !== imageObj.path);
+    try {
+      await deleteObject(storageRef(storage, imageObj.path));
+    } catch {}
+
+    const s = souvenirs.find((s) => s.id === souvenirId);
+    const newImages = s.images.filter((im) => im.path !== imageObj.path);
 
     await updateDoc(doc(db, "souvenirs", souvenirId), { images: newImages });
   };
 
-  /* Delete Souvenir */
-  const deleteSouvenir = async (id) => {
-    if (!window.confirm("Delete this souvenir?")) return;
-
-    try {
-      const folder = storageRef(storage, `souvenirs/${id}`);
-      const items = await listAll(folder);
-      await Promise.all(items.items.map((ref) => deleteObject(ref)));
-    } catch {}
-
-    await deleteDoc(doc(db, "souvenirs", id));
-  };
+  const handleAddFiles = (e) => setAddFiles(e.target.files);
+  const handleEditFiles = (e) => setEditFiles(e.target.files);
 
   return (
-    <div className="bg-cream min-h-screen">
+    <div style={{ backgroundColor: "#EDE6D6", minHeight: "100vh" }}>
       <Navbar />
+      <div style={{ padding: "30px" }}>
+        <h2 style={{ color: "#4E342E" }}>Admin Dashboard (OliveLine)</h2>
 
-      <div className="max-w-7xl mx-auto p-8">
-
-        <h2 className="text-3xl font-bold text-brown mb-8">
-          Admin Dashboard (OliveLine)
-        </h2>
-
-        {/* ------------------- ADD CATEGORY ------------------- */}
-        <div className="mb-10 bg-softwhite border border-brown/20 p-6 rounded-lg shadow-sm">
-          <h3 className="text-xl font-semibold text-brown mb-4">Add Category</h3>
-
-          <div className="flex flex-wrap items-center gap-4">
+        {/* Category Section */}
+        <div style={{ marginTop: "20px" }}>
+          <h3 style={{ color: "#4E342E" }}>Add Category</h3>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
             <input
               type="text"
+              placeholder="Category Name"
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
-              placeholder="Category Name"
-              className="p-2 rounded border border-brown/30 bg-cream text-brown"
             />
-
             <button
               onClick={addCategory}
-              className="bg-brown text-softwhite px-5 py-2 rounded hover:bg-[#3e271e]"
+              style={{
+                backgroundColor: "#4E342E",
+                color: "white",
+                border: "none",
+                borderRadius: "6px",
+                padding: "8px 15px",
+                cursor: "pointer",
+              }}
             >
               Add Category
             </button>
           </div>
 
-          <div className="flex flex-wrap gap-3 mt-4">
+          <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {categories.map((c) => (
-              <span key={c.id} className="px-3 py-1 bg-softwhite border border-brown/20 rounded text-brown shadow-sm">
+              <div key={c.id} style={{ background: "#FFF", padding: "6px 10px", borderRadius: 6 }}>
                 {c.name}
-              </span>
+              </div>
             ))}
           </div>
         </div>
 
-        {/* ------------------- ADD SOUVENIR ------------------- */}
-        <div className="bg-softwhite border border-brown/20 p-6 rounded-lg shadow-sm mb-10 flex flex-wrap gap-4">
+        {/* Add Souvenir Form */}
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            marginTop: "30px",
+            flexWrap: "wrap",
+            alignItems: "center",
+            background: "#fff",
+            padding: 12,
+            borderRadius: 8,
+          }}
+        >
+          <input
+            type="text"
+            placeholder="Name *"
+            value={newItem.name}
+            onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+          />
 
-          {/* inputs */}
-          {[
-            { key: "name", ph: "Name *" },
-            { key: "manufacturer", ph: "Manufacturer *" },
-            { key: "price", ph: "Price *", type: "number" },
-            { key: "description", ph: "Description *" },
-            { key: "size", ph: "Size (x*y*z) *" },
-            { key: "material", ph: "Material *" },
-            { key: "weight", ph: "Weight (optional)" },
-            { key: "imageURL", ph: "Thumbnail URL (optional)" },
-          ].map((f) => (
-            <input
-              key={f.key}
-              type={f.type || "text"}
-              placeholder={f.ph}
-              value={newItem[f.key]}
-              onChange={(e) => setNewItem({ ...newItem, [f.key]: e.target.value })}
-              className="p-2 border border-brown/30 bg-cream rounded flex-1 min-w-[200px] text-brown"
-            />
-          ))}
+          <input
+            type="text"
+            placeholder="Manufacturer *"
+            value={newItem.manufacturer}
+            onChange={(e) => setNewItem({ ...newItem, manufacturer: e.target.value })}
+          />
+
+          <input
+            type="number"
+            placeholder="Buy Price *"
+            value={newItem.buy}
+            onChange={(e) => setNewItem({ ...newItem, buy: e.target.value })}
+          />
+{/* Tier Pricing (per item) */}
+<div style={{ width: "100%" }}>
+  <strong>Tier Pricing (per item)</strong>
+
+  {(newItem.tierPricing || []).map((tier, index) => (
+  <div
+    key={index}
+    style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}
+  >
+    <input
+      type="number"
+      placeholder="Min Qty"
+      value={tier.min}
+      onChange={(e) => {
+        const copy = [...(newItem.tierPricing || [])];
+        copy[index].min = Number(e.target.value);
+        setNewItem({ ...newItem, tierPricing: copy });
+      }}
+    />
+
+    <input
+      type="number"
+      placeholder="Max Qty"
+      value={tier.max}
+      onChange={(e) => {
+        const copy = [...(newItem.tierPricing || [])];
+        copy[index].max = Number(e.target.value);
+        setNewItem({ ...newItem, tierPricing: copy });
+      }}
+    />
+
+    <input
+      type="number"
+      step="0.1"
+      placeholder="Multiplier"
+      value={tier.multiplier}
+      onChange={(e) => {
+        const copy = [...(newItem.tierPricing || [])];
+        copy[index].multiplier = Number(e.target.value);
+        setNewItem({ ...newItem, tierPricing: copy });
+      }}
+    />
+
+    <button
+      onClick={() => {
+        const copy = (newItem.tierPricing || []).filter((_, i) => i !== index);
+        setNewItem({ ...newItem, tierPricing: copy });
+      }}
+    >
+      ✕
+    </button>
+  </div>
+))}
+
+
+  <button
+    style={{ marginTop: 6 }}
+    onClick={() =>
+      setNewItem({
+        ...newItem,
+        tierPricing: [...newItem.tierPricing, { ...EMPTY_TIER }],
+      })
+    }
+  >
+    + Add Tier
+  </button>
+</div>
+
+          <input
+            type="text"
+            placeholder="Description *"
+            value={newItem.description}
+            onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Size (x*y*z) *"
+            value={newItem.size}
+            onChange={(e) => setNewItem({ ...newItem, size: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Material *"
+            value={newItem.material}
+            onChange={(e) => setNewItem({ ...newItem, material: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Weight (optional)"
+            value={newItem.weight}
+            onChange={(e) => setNewItem({ ...newItem, weight: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Thumbnail URL (optional)"
+            value={newItem.imageURL}
+            onChange={(e) => setNewItem({ ...newItem, imageURL: e.target.value })}
+          />
 
           <select
             value={newItem.categoryId}
             onChange={(e) => setNewItem({ ...newItem, categoryId: e.target.value })}
-            className="p-2 border border-brown/30 bg-cream rounded min-w-[180px] text-brown"
           >
             <option value="">Choose Category *</option>
             {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
             ))}
           </select>
 
-          <label className="cursor-pointer">
-            <input type="file" multiple onChange={(e) => setAddFiles(e.target.files)} className="hidden" />
-            <div className="px-4 py-2 bg-brown/20 text-brown rounded hover:bg-brown/30">
+          <label style={{ cursor: "pointer" }}>
+            <input type="file" multiple onChange={handleAddFiles} style={{ display: "none" }} />
+            <div style={{ padding: "6px 10px", background: "#eee", borderRadius: 6 }}>
               Choose Images
             </div>
           </label>
 
           <button
             onClick={addSouvenir}
-            className="bg-olive text-softwhite px-5 py-2 rounded hover:bg-[#5b6c2e]"
+            style={{
+              backgroundColor: "#708238",
+              color: "white",
+              border: "none",
+              borderRadius: "6px",
+              padding: "8px 15px",
+              cursor: "pointer",
+            }}
           >
             Add Souvenir
           </button>
         </div>
 
-        {/* ------------------- FILES PREVIEW ------------------- */}
+        {/* Files Preview */}
         {addFiles.length > 0 && (
-          <div className="mb-8">
-            <strong className="text-brown">Files to upload:</strong>
-            <div className="flex flex-wrap gap-2 mt-2">
+          <div style={{ marginTop: 10 }}>
+            <strong>Files to upload:</strong>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               {Array.from(addFiles).map((f, i) => (
-                <span key={i} className="bg-softwhite border border-brown/20 px-3 py-1 rounded shadow-sm text-brown">
+                <div key={i} style={{ padding: 6, background: "#fff", borderRadius: 6 }}>
                   {f.name}
-                </span>
+                </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ------------------- SOUVENIRS GRID ------------------- */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {/* Souvenirs Grid */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            gap: "20px",
+            marginTop: "30px",
+          }}
+        >
           {souvenirs.map((s) => {
             const cat = categories.find((c) => c.id === s.categoryId);
-
             return (
-              <div key={s.id} className="bg-softwhite border border-brown/20 rounded-lg shadow-sm p-4">
-
-                {/* Image */}
-                <div className="h-48 bg-cream rounded flex items-center justify-center overflow-hidden">
+              <div
+                key={s.id}
+                style={{
+                  background: "white",
+                  borderRadius: "10px",
+                  padding: "15px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    height: 180,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    background: "#f8f8f8",
+                    borderRadius: 8,
+                  }}
+                >
                   {s.imageURL ? (
-                    <img src={s.imageURL} className="max-h-full max-w-full object-contain" />
+                    <img src={s.imageURL} style={{ maxWidth: "100%", maxHeight: "100%" }} />
                   ) : s.images?.length > 0 ? (
-                    <img src={s.images[0].url} className="max-h-full max-w-full object-contain" />
+                    <img src={s.images[0].url} style={{ maxWidth: "100%", maxHeight: "100%" }} />
                   ) : (
-                    <span className="text-brown/40">No image</span>
+                    "No image"
                   )}
                 </div>
 
-                {/* Info */}
-                <h3 className="text-olive font-semibold mt-3">{s.name}</h3>
-                <p className="text-brown/80">{s.manufacturer}</p>
-                <p className="text-brown"><b>Price:</b> {s.price} ₪</p>
-                <p className="text-brown/90 text-sm"><b>Description:</b> {s.description}</p>
-                <p className="text-brown/90 text-sm"><b>Size:</b> {s.size}</p>
-                <p className="text-brown/90 text-sm"><b>Material:</b> {s.material}</p>
-                {s.weight && <p className="text-brown/90 text-sm"><b>Weight:</b> {s.weight}</p>}
-                <p className="text-brown/90 text-sm"><b>Category:</b> {cat?.name}</p>
+                <h3 style={{ color: "#708238", marginTop: 12 }}>{s.name}</h3>
+                <p>{s.manufacturer}</p>
+                <p><b>Buy:</b> {s.buy} ₪</p>
+                <p><b>Description:</b> {s.description}</p>
+                <p><b>Size:</b> {s.size}</p>
+                <p><b>Material:</b> {s.material}</p>
+                {s.weight && <p><b>Weight:</b> {s.weight}</p>}
+                <p><b>Category:</b> {cat?.name || "—"}</p>
 
-                {/* Thumbnails */}
-                <div className="flex gap-2 mt-2 overflow-x-auto">
+                {/* images thumbnails */}
+                <div style={{ display: "flex", gap: 8, marginTop: 8, overflowX: "auto" }}>
                   {s.images?.map((img) => (
-                    <div key={img.path} className="relative">
-                      <img src={img.url} className="w-16 h-16 object-cover rounded" />
-
+                    <div key={img.path} style={{ position: "relative" }}>
+                      <img
+                        src={img.url}
+                        style={{
+                          width: 70,
+                          height: 70,
+                          objectFit: "cover",
+                          borderRadius: 6,
+                        }}
+                      />
                       <button
                         onClick={() => deleteImageFromSouvenir(s.id, img)}
-                        className="absolute top-1 right-1 bg-brown/80 text-softwhite px-1 rounded text-xs"
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          background: "rgba(0,0,0,0.6)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 4,
+                          padding: "2px 5px",
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
                       >
                         ✕
                       </button>
@@ -349,95 +548,252 @@ function Dashboard() {
                   ))}
                 </div>
 
-                {/* Buttons */}
-                <div className="flex gap-2 mt-4">
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   <button
                     onClick={() => startEdit(s)}
-                    className="bg-brown text-softwhite px-4 py-1 rounded hover:bg-[#3e271e]"
+                    style={{
+                      backgroundColor: "#4E342E",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "6px 12px",
+                      cursor: "pointer",
+                    }}
                   >
                     Edit
                   </button>
+
                   <button
                     onClick={() => deleteSouvenir(s.id)}
-                    className="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700"
+                    style={{
+                      backgroundColor: "#B00020",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "6px 12px",
+                      cursor: "pointer",
+                    }}
                   >
                     Delete
                   </button>
                 </div>
-
               </div>
             );
           })}
         </div>
 
-        {/* ------------------- EDIT MODAL ------------------- */}
+        {/* Edit Modal */}
         {editingId && editingItem && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div className="bg-softwhite border border-brown/20 rounded-xl p-6 w-full max-w-3xl shadow-lg">
+          <div
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.4)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 9999,
+            }}
+          >
+            <div style={{ background: "#fff", padding: 20, borderRadius: 8, width: 900 }}>
+              <h3>Edit Souvenir</h3>
 
-              <h3 className="text-xl font-semibold text-brown mb-4">Edit Souvenir</h3>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <input
+                  type="text"
+                  placeholder="Name"
+                  value={editingItem.name}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, name: e.target.value })
+                  }
+                />
 
-              <div className="flex flex-wrap gap-4">
+                <input
+                  type="text"
+                  placeholder="Manufacturer"
+                  value={editingItem.manufacturer}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, manufacturer: e.target.value })
+                  }
+                />
 
-                {/* Editable fields */}
-                {[
-                  { k: "name", ph: "Name" },
-                  { k: "manufacturer", ph: "Manufacturer" },
-                  { k: "price", ph: "Price", type: "number" },
-                  { k: "description", ph: "Description" },
-                  { k: "size", ph: "Size (x*y*z)" },
-                  { k: "material", ph: "Material" },
-                  { k: "weight", ph: "Weight (optional)" },
-                  { k: "imageURL", ph: "Thumbnail URL" },
-                ].map((f) => (
-                  <input
-                    key={f.k}
-                    type={f.type || "text"}
-                    placeholder={f.ph}
-                    value={editingItem[f.k]}
-                    onChange={(e) => setEditingItem({ ...editingItem, [f.k]: e.target.value })}
-                    className="p-2 border border-brown/30 bg-cream rounded flex-1 min-w-[200px] text-brown"
-                  />
-                ))}
+                <input
+                  type="number"
+                  placeholder="Buy Price"
+                  value={editingItem.buy}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, buy: e.target.value })
+                  }
+                />
+{/* Tier Pricing (per item) */}
+<div style={{ width: "100%", marginTop: 10 }}>
+  <strong>Tier Pricing</strong>
+
+  {(editingItem.tierPricing || []).map((tier, index) => (
+    <div
+      key={index}
+      style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}
+    >
+      <input
+        type="number"
+        placeholder="Min Qty"
+        value={tier.min}
+        onChange={(e) => {
+          const copy = [...editingItem.tierPricing];
+          copy[index].min = Number(e.target.value);
+          setEditingItem({ ...editingItem, tierPricing: copy });
+        }}
+      />
+
+      <input
+        type="number"
+        placeholder="Max Qty"
+        value={tier.max}
+        onChange={(e) => {
+          const copy = [...editingItem.tierPricing];
+          copy[index].max = Number(e.target.value);
+          setEditingItem({ ...editingItem, tierPricing: copy });
+        }}
+      />
+
+      <input
+        type="number"
+        step="0.1"
+        placeholder="Multiplier"
+        value={tier.multiplier}
+        onChange={(e) => {
+          const copy = [...editingItem.tierPricing];
+          copy[index].multiplier = Number(e.target.value);
+          setEditingItem({ ...editingItem, tierPricing: copy });
+        }}
+      />
+
+      <button
+        onClick={() => {
+          const copy = editingItem.tierPricing.filter((_, i) => i !== index);
+          setEditingItem({ ...editingItem, tierPricing: copy });
+        }}
+      >
+        ✕
+      </button>
+    </div>
+  ))}
+
+  <button
+    style={{ marginTop: 6 }}
+    onClick={() =>
+      setEditingItem({
+        ...editingItem,
+        tierPricing: [
+          ...(editingItem.tierPricing || []),
+          { min: 1, max: 1, multiplier: 1 },
+        ],
+      })
+    }
+  >
+    + Add Tier
+  </button>
+</div>
+
+                <input
+                  type="text"
+                  placeholder="Description"
+                  value={editingItem.description}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, description: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Size (x*y*z)"
+                  value={editingItem.size}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, size: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Material"
+                  value={editingItem.material}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, material: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Weight (optional)"
+                  value={editingItem.weight}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, weight: e.target.value })
+                  }
+                />
+
+                <input
+                  type="text"
+                  placeholder="Thumbnail URL"
+                  value={editingItem.imageURL}
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, imageURL: e.target.value })
+                  }
+                />
 
                 <select
                   value={editingItem.categoryId}
-                  onChange={(e) => setEditingItem({ ...editingItem, categoryId: e.target.value })}
-                  className="p-2 border border-brown/30 bg-cream rounded min-w-[180px] text-brown"
+                  onChange={(e) =>
+                    setEditingItem({ ...editingItem, categoryId: e.target.value })
+                  }
                 >
                   <option value="">Choose Category</option>
                   {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
 
-                <label className="cursor-pointer">
-                  <input type="file" multiple onChange={(e) => setEditFiles(e.target.files)} className="hidden" />
-                  <div className="p-2 bg-brown/20 rounded hover:bg-brown/30 text-brown">
+                <label>
+                  <input type="file" multiple onChange={handleEditFiles} style={{ display: "none" }} />
+                  <div style={{ padding: 6, background: "#eee", borderRadius: 6, cursor: "pointer" }}>
                     Add Images
                   </div>
                 </label>
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
                 <button
                   onClick={saveEdit}
-                  className="bg-olive text-softwhite px-4 py-2 rounded hover:bg-[#5b6c2e]"
+                  style={{
+                    backgroundColor: "#708238",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 15px",
+                    cursor: "pointer",
+                  }}
                 >
                   Save Changes
                 </button>
+
                 <button
-                  onClick={() => { setEditingId(null); setEditingItem(null); }}
-                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                  onClick={cancelEdit}
+                  style={{
+                    backgroundColor: "#B00020",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 15px",
+                    cursor: "pointer",
+                  }}
                 >
                   Cancel
                 </button>
               </div>
-
             </div>
           </div>
         )}
-
       </div>
     </div>
   );

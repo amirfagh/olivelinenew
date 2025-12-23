@@ -31,6 +31,114 @@ export default function Catalog() {
 
   const [showBasket, setShowBasket] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+const calculateTierPrice = (item, quantity) => {
+  const buy = Number(item.buy);
+  const tiers = item.tierPricing;
+
+  if (!buy || !Array.isArray(tiers) || tiers.length === 0) {
+    return buy; // fallback
+  }
+
+  const sortedTiers = [...tiers].sort((a, b) => a.min - b.min);
+
+// 1️⃣ Try exact match first
+let tier = sortedTiers.find(
+  (t) => quantity >= t.min && quantity <= t.max
+);
+
+// 2️⃣ If no match, use the highest min tier (∞ behavior)
+if (!tier) {
+  tier = sortedTiers[sortedTiers.length - 1];
+}
+
+return buy * Number(tier.multiplier);
+
+
+  return buy * Number(tier.multiplier);
+};
+const getNextTierHint = (item, quantity) => {
+  const tiers = item.tierPricing;
+  const buy = Number(item.buy);
+
+  if (!Array.isArray(tiers) || tiers.length < 2) return null;
+
+  const sorted = [...tiers].sort((a, b) => a.min - b.min);
+
+  const currentIndex = sorted.findIndex(
+    (t) => quantity >= t.min && quantity <= t.max
+  );
+
+  if (currentIndex === -1) return null;
+
+  const nextTier = sorted[currentIndex + 1];
+  if (!nextTier) return null;
+
+  return {
+    minQty: nextTier.min,
+    nextPrice: buy * Number(nextTier.multiplier),
+  };
+};
+const getTierContext = (item, quantity) => {
+  const buy = Number(item.buy);
+  const tiers = item.tierPricing;
+
+  if (!Array.isArray(tiers) || tiers.length === 0) return null;
+
+  const sorted = [...tiers].sort((a, b) => a.min - b.min);
+
+  // ✅ find the highest tier that quantity qualifies for
+  const currentTier =
+    [...sorted]
+      .reverse()
+      .find((t) => quantity >= t.min) || sorted[0];
+
+  const currentIndex = sorted.findIndex(
+    (t) => t.min === currentTier.min
+  );
+
+  const nextTier = sorted[currentIndex + 1] || null;
+
+  const currentPrice = buy * Number(currentTier.multiplier);
+
+  // ✅ BEST PRICE UNLOCKED (infinite logic)
+  if (!nextTier) {
+    return {
+      currentPrice,
+      isBestPrice: true,
+      nextTier: null,
+      nextPrice: null,
+      savePercent: null,
+      progress: null,
+    };
+  }
+
+  // ✅ still has a next tier
+  const nextPrice = buy * Number(nextTier.multiplier);
+  const savePercent = Math.round(
+    ((currentPrice - nextPrice) / currentPrice) * 100
+  );
+
+  const progress = Math.min(
+    100,
+    Math.max(
+      0,
+      ((quantity - currentTier.min) /
+        (nextTier.min - currentTier.min)) *
+        100
+    )
+  );
+
+  return {
+    currentPrice,
+    nextTier,
+    nextPrice,
+    savePercent,
+    progress,
+    isBestPrice: false,
+  };
+};
+
+
 
   // 🔑 Fetch role + customerId from users collection
   useEffect(() => {
@@ -89,35 +197,56 @@ export default function Catalog() {
   };
 
   const addToBasket = (souvenir) => {
-    const existing = basket.find((item) => item.id === souvenir.id);
+  const existing = basket.find((item) => item.id === souvenir.id);
 
-    const image =
-      souvenir.imageURL ||
-      (souvenir.images?.length ? souvenir.images[0].url : null);
+  const image =
+    souvenir.imageURL ||
+    (souvenir.images?.length ? souvenir.images[0].url : null);
 
-    const itemToAdd = { ...souvenir, image };
+  // ✅ MUST be declared BEFORE using it below
+  const quantity = Number(souvenir.quantity || 1);
+  const unitPrice = calculateTierPrice(souvenir, quantity);
 
-    if (existing) {
-      setBasket((prev) =>
-        prev.map((item) =>
-          item.id === souvenir.id
-            ? { ...item, quantity: item.quantity + Number(souvenir.quantity) }
-            : item
-        )
-      );
-    } else {
-      setBasket((prev) => [...prev, itemToAdd]);
-    }
-
-    pushMessage(`${souvenir.name} added to basket!`);
+  const itemToAdd = {
+    ...souvenir,
+    image,
+    price: unitPrice,
   };
 
-  const updateBasketQuantity = (id, qty) => {
-    if (qty < 1 || Number.isNaN(qty)) return;
+  if (existing) {
     setBasket((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, quantity: qty } : item))
+      prev.map((item) =>
+        item.id === souvenir.id
+          ? { ...item, quantity: Number(item.quantity) + quantity } // ✅ uses quantity here
+          : item
+      )
     );
-  };
+  } else {
+    setBasket((prev) => [...prev, itemToAdd]);
+  }
+
+  pushMessage(`${souvenir.name} added to basket!`);
+};
+
+
+ const updateBasketQuantity = (id, qty) => {
+  if (qty < 1 || Number.isNaN(qty)) return;
+
+  setBasket((prev) =>
+    prev.map((item) => {
+      if (item.id !== id) return item;
+
+      const newPrice = calculateTierPrice(item, qty);
+
+      return {
+        ...item,
+        quantity: qty,
+        price: newPrice, // ✅ recalculated unit price
+      };
+    })
+  );
+};
+
 
   const removeFromBasket = (id) => {
     setBasket((prev) => prev.filter((item) => item.id !== id));
@@ -310,13 +439,24 @@ export default function Catalog() {
         {/* Product grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {displayedSouvenirs.map((souvenir) => {
+            const displayPrice = calculateTierPrice(
+  souvenir,
+  Number(souvenir.quantity || 1)
+);
+const nextTier = getNextTierHint(
+  souvenir,
+  Number(souvenir.quantity || 1)
+);
+const qty = Number(souvenir.quantity || 1);
+const tierCtx = getTierContext(souvenir, qty);
+
             const category = categories.find(
               (c) => c.id === souvenir.categoryId
             );
             return (
               <article
                 key={souvenir.id}
-                className="bg-white rounded-2xl shadow-sm hover:shadow-md transform hover:-translate-y-1 transition overflow-hidden"
+                className="relative bg-white rounded-2xl shadow-sm hover:shadow-md transform hover:-translate-y-1 transition overflow-hidden"
               >
                 <div className="relative h-56 bg-gradient-to-br from-gray-100 to-white flex items-center justify-center">
                   {souvenir.imageURL ? (
@@ -357,8 +497,62 @@ export default function Catalog() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-medium text-[#708238]">
-                        {Number(souvenir.price).toFixed(2)} NIS
-                      </div>
+  {displayPrice.toFixed(2)} NIS
+</div>
+
+{nextTier && (
+  
+  <div className="
+  absolute top-4 right-4
+  bg-red-200 text-red-800
+  text-xs font-semibold
+  px-3 py-1
+  rounded-full
+  border border-red-300
+  shadow
+">
+  Better @ {nextTier.minQty}+ → {nextTier.nextPrice.toFixed(2)} ₪
+</div>
+)}
+{tierCtx?.isBestPrice && (
+  <div className="
+    absolute top-4 right-4
+    bg-green-100 text-green-700
+    text-xs font-semibold
+    px-3 py-1
+    rounded-full
+    border border-green-300
+    shadow-sm
+  ">
+    Best price unlocked ✓
+  </div>
+)}
+{tierCtx?.nextTier && tierCtx.savePercent > 0 && (
+  <div className="text-xs text-gray-500 mt-1">
+    Save{" "}
+    <span className="font-medium text-[#708238]">
+      {tierCtx.savePercent}%
+    </span>{" "}
+    at {tierCtx.nextTier.min}+ units
+  </div>
+)}
+{tierCtx?.nextTier && !tierCtx.isBestPrice && (
+
+  <div className="mt-2">
+    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+      <div
+        className="h-full bg-[#708238] transition-all"
+        style={{ width: `${tierCtx.progress}%` }}
+      />
+    </div>
+    <div className="text-[10px] text-gray-400 mt-1">
+      {Math.max(0, tierCtx.nextTier.min - qty)} more units for better price
+
+    </div>
+  </div>
+)}
+
+
                       <div className="text-xs text-gray-400">Price</div>
                     </div>
                   </div>
