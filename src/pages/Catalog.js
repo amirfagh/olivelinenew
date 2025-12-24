@@ -31,6 +31,9 @@ export default function Catalog() {
 
   const [showBasket, setShowBasket] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [customers, setCustomers] = useState([]);
+const [selectedCustomer, setSelectedCustomer] = useState(null);
+
 const calculateTierPrice = (item, quantity) => {
   const buy = Number(item.buy);
   const tiers = item.tierPricing;
@@ -138,6 +141,15 @@ const getTierContext = (item, quantity) => {
   };
 };
 
+useEffect(() => {
+  if (role !== "admin") return;
+
+  const unsub = onSnapshot(collection(db, "customers"), (snap) => {
+    setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+
+  return () => unsub();
+}, [role]);
 
 
   // 🔑 Fetch role + customerId from users collection
@@ -320,11 +332,16 @@ const getTierContext = (item, quantity) => {
         price: Number(b.price),
         quantity: Number(b.quantity),
       }));
-
+const finalCustomerId =
+  role === "admin" ? selectedCustomer : customerId;
       const orderPayload = {
-        customerId: customerId || null,
+       customerId: finalCustomerId,
+  customerEmail:
+    role === "admin"
+      ? customers.find((c) => c.id === finalCustomerId)?.email || ""
+      : auth.currentUser.email,
         createdBy: auth.currentUser.uid,
-        customerEmail: auth.currentUser.email,
+        
         items,
         status: "pending",
         stage: "offer",
@@ -419,7 +436,7 @@ const getTierContext = (item, quantity) => {
               </button>
             </div>
 
-            {role === "viewer" && (
+            {(role === "viewer" || role === "admin") && (
               <button
                 onClick={() => setShowBasket(true)}
                 className="relative inline-flex items-center gap-2 px-4 py-2 rounded-full shadow bg-[#708238] text-white hover:scale-105 transform transition"
@@ -475,7 +492,7 @@ const tierCtx = getTierContext(souvenir, qty);
                     <div className="text-gray-400">No image</div>
                   )}
 
-                  {role === "viewer" && (
+                  {(role === "viewer" || role === "admin") && (
                     <button
                       onClick={() => addToBasket(souvenir)}
                       className="absolute bottom-3 right-3 bg-[#708238] text-white px-3 py-1 rounded-full text-sm shadow hover:scale-105"
@@ -566,7 +583,7 @@ const tierCtx = getTierContext(souvenir, qty);
                       {category ? category.name : "-"}
                     </span>
 
-                    {role === "viewer" && (
+                    {(role === "viewer" || role === "admin") && (
                       <div className="flex items-center gap-2">
                         <div className="flex items-center border rounded-md overflow-hidden">
                           <button
@@ -776,6 +793,25 @@ const tierCtx = getTierContext(souvenir, qty);
                 {total.toFixed(2)} NIS
               </div>
             </div>
+{role === "admin" && (
+  <div className="mt-4">
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      Select Customer
+    </label>
+    <select
+      value={selectedCustomer || ""}
+      onChange={(e) => setSelectedCustomer(e.target.value)}
+      className="w-full border rounded-md px-3 py-2 text-sm"
+    >
+      <option value="">-- Choose customer --</option>
+      {customers.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.companyName} ({c.contactName})
+        </option>
+      ))}
+    </select>
+  </div>
+)}
 
             <div className="mt-6 flex gap-3">
               <button
@@ -785,11 +821,18 @@ const tierCtx = getTierContext(souvenir, qty);
                 Cancel
               </button>
               <button
-                onClick={placeOrder}
-                className="flex-1 py-2 bg-[#708238] text-white rounded-md"
-              >
-                Confirm & Create Offer
-              </button>
+  onClick={() => {
+    if (role === "admin" && !selectedCustomer) {
+      pushMessage("Please select a customer", "error");
+      return;
+    }
+    placeOrder();
+  }}
+  className="flex-1 py-2 bg-[#708238] text-white rounded-md"
+>
+  Confirm & Create Offer
+</button>
+
             </div>
           </div>
         </div>
