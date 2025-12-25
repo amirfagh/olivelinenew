@@ -285,44 +285,109 @@ useEffect(() => {
   };
 
   // PDF generator (unchanged UI-wise)
-  const generatePriceOfferPdfBlob = (orderData) => {
-    const pdf = new jsPDF();
-    pdf.setFontSize(18);
-    pdf.text("OliveLine - Price Offer", 20, 20);
-    pdf.setFontSize(11);
+ const generatePriceOfferPdfBlob = (orderData) => {
+  const pdf = new jsPDF();
+  const left = 20;
+  const right = 140;
 
-    pdf.text(`Date: ${new Date().toLocaleDateString("he-IL")}`, 20, 32);
-    pdf.text(`Customer Email: ${orderData.customerEmail}`, 20, 40);
+  // ===== HEADER =====
+  pdf.setFontSize(18);
+  pdf.text("OLIVELINE", left, 20);
+  pdf.setFontSize(11);
+  pdf.text("Your Direct Link to Holy Land Treasures", left, 28);
 
-    let y = 60;
-    pdf.text("Items:", 20, y);
-    y += 10;
+  pdf.setFontSize(12);
+  pdf.text("QUOTE", right, 20);
 
-    orderData.items.forEach((item) => {
-      pdf.text(
-        `${item.name} x${item.quantity} — ${(item.price * item.quantity).toFixed(
-          2
-        )} ₪`,
-        20,
-        y
-      );
-      y += 6;
-    });
+  pdf.setFontSize(10);
+  pdf.text(`Date: ${new Date().toLocaleDateString()}`, right, 30);
+  pdf.text(`Quote No: ${orderData.quotation.number}`, right, 36);
+  pdf.text(`Customer ID: ${orderData.customerId || "-"}`, right, 42);
+  pdf.text(
+    `Valid Until: ${orderData.quotation.validUntil
+      .toDate()
+      .toLocaleDateString()}`,
+    right,
+    48
+  );
 
-    y += 8;
-    pdf.text(`Subtotal: ${subtotal.toFixed(2)} ₪`, 20, y);
+  // ===== CUSTOMER =====
+  pdf.setFontSize(11);
+  pdf.text("CUSTOMER", left, 60);
+
+  pdf.setFontSize(10);
+  pdf.text(`Email: ${orderData.customerEmail}`, left, 68);
+
+  // ===== TABLE HEADER =====
+  let y = 80;
+  pdf.setFontSize(10);
+  pdf.line(left, y, 190, y);
+  y += 6;
+
+  pdf.text("DESCRIPTION", left, y);
+  pdf.text("QTY", 120, y);
+  pdf.text("UNIT PRICE", 140, y);
+  pdf.text("TOTAL", 170, y);
+
+  y += 4;
+  pdf.line(left, y, 190, y);
+
+  // ===== ITEMS =====
+  y += 6;
+  orderData.items.forEach((item) => {
+    pdf.text(item.name, left, y);
+    pdf.text(String(item.quantity), 122, y);
+    pdf.text(item.price.toFixed(2), 142, y);
+    pdf.text(
+      (item.price * item.quantity).toFixed(2),
+      172,
+      y,
+      { align: "right" }
+    );
     y += 6;
-    pdf.text(`VAT (18%): ${vat.toFixed(2)} ₪`, 20, y);
-    y += 6;
-    pdf.text(`Total: ${total.toFixed(2)} ₪`, 20, y);
+  });
 
-    y += 15;
-    pdf.text("Signature: ____________________", 20, y);
-    y += 6;
-    pdf.text("Stamp: _______________________", 20, y);
+  // ===== TOTALS =====
+  y += 6;
+  pdf.line(120, y, 190, y);
+  y += 6;
 
-    return pdf.output("blob");
-  };
+  pdf.text("Subtotal:", 140, y);
+  pdf.text(subtotal.toFixed(2), 190, y, { align: "right" });
+
+  y += 6;
+  pdf.text("VAT (18%):", 140, y);
+  pdf.text(vat.toFixed(2), 190, y, { align: "right" });
+
+  y += 6;
+  pdf.setFontSize(11);
+  pdf.text("TOTAL:", 140, y);
+  pdf.text(total.toFixed(2), 190, y, { align: "right" });
+
+  // ===== TERMS =====
+  y += 16;
+  pdf.setFontSize(10);
+  pdf.text("Terms and Conditions:", left, y);
+  y += 6;
+  pdf.text("• Prices valid for 14 days", left, y);
+  y += 5;
+  pdf.text("• 50% advance payment required", left, y);
+  y += 5;
+  pdf.text("• Handmade Holy Land olive wood products", left, y);
+
+  // ===== SIGNATURE =====
+  y += 12;
+  pdf.text("Signature: ____________________", left, y);
+  y += 6;
+  pdf.text("Stamp: _______________________", left, y);
+
+  // ===== FOOTER =====
+  y += 12;
+  pdf.text("THANK YOU", left, y);
+
+  return pdf.output("blob");
+};
+
 
   const placeOrder = async () => {
     try {
@@ -335,28 +400,45 @@ useEffect(() => {
 const finalCustomerId =
   role === "admin" ? selectedCustomer : customerId;
       const orderPayload = {
-       customerId: finalCustomerId,
+  customerId: finalCustomerId,
   customerEmail:
     role === "admin"
       ? customers.find((c) => c.id === finalCustomerId)?.email || ""
       : auth.currentUser.email,
-        createdBy: auth.currentUser.uid,
-        
-        items,
-        status: "pending",
-        stage: "offer",
-        totals: {
-          subtotal,
-          vat,
-          total,
-        },
-        documents: {
-          offerDraft: {},
-          offerSigned: {},
-        },
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      };
+
+  createdBy: auth.currentUser.uid,
+
+  quotation: {
+    number: `OL-Q-${Date.now()}`,
+    issuedAt: Timestamp.now(),
+    validUntil: Timestamp.fromDate(
+      new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 days
+    ),
+    currency: "NIS",
+    vatRate: 0.18,
+    paymentTerms: "50% advance, balance before delivery",
+    deliveryTime: "7–10 business days",
+  },
+
+  items,
+  status: "pending",
+  stage: "offer",
+
+  totals: {
+    subtotal,
+    vat,
+    total,
+  },
+
+  documents: {
+    offerDraft: {},
+    offerSigned: {},
+  },
+
+  createdAt: Timestamp.now(),
+  updatedAt: Timestamp.now(),
+};
+
 
       const orderRef = await addDoc(collection(db, "orders"), orderPayload);
 
@@ -508,9 +590,7 @@ const tierCtx = getTierContext(souvenir, qty);
                       <h3 className="text-lg font-semibold text-[#4E342E]">
                         {souvenir.name}
                       </h3>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {souvenir.manufacturer}
-                      </p>
+                      
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-medium text-[#708238]">
