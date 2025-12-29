@@ -28,6 +28,12 @@ export default function Catalog() {
   const [message, setMessage] = useState(null);
   const [role, setRole] = useState(null);
   const [customerId, setCustomerId] = useState(null);
+const [imageIndexMap, setImageIndexMap] = useState({});
+const [galleryItem, setGalleryItem] = useState(null);
+// { images: [], index: 0 }
+const hoverTimerRef = React.useRef(null);
+const AUTO_PLAY_MS = 2500;
+const autoPlayRef = React.useRef({});
 
   const [showBasket, setShowBasket] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -140,6 +146,44 @@ const getTierContext = (item, quantity) => {
     isBestPrice: false,
   };
 };
+const nextImage = (id, imagesLength) => {
+  setImageIndexMap((prev) => ({
+    ...prev,
+    [id]: ((prev[id] || 0) + 1) % imagesLength,
+  }));
+};
+
+const prevImage = (id, imagesLength) => {
+  setImageIndexMap((prev) => ({
+    ...prev,
+    [id]:
+      (prev[id] || 0) === 0
+        ? imagesLength - 1
+        : (prev[id] || 0) - 1,
+  }));
+};
+useEffect(() => {
+  // clear all existing intervals
+  Object.values(autoPlayRef.current).forEach(clearInterval);
+  autoPlayRef.current = {};
+
+  souvenirs.forEach((souvenir) => {
+    if (!souvenir.images || souvenir.images.length < 2) return;
+
+    autoPlayRef.current[souvenir.id] = setInterval(() => {
+      setImageIndexMap((prev) => ({
+        ...prev,
+        [souvenir.id]:
+          ((prev[souvenir.id] || 0) + 1) %
+          souvenir.images.length,
+      }));
+    }, AUTO_PLAY_MS);
+  });
+
+  return () => {
+    Object.values(autoPlayRef.current).forEach(clearInterval);
+  };
+}, [souvenirs]);
 
 useEffect(() => {
   if (role !== "admin") return;
@@ -198,8 +242,8 @@ useEffect(() => {
       selectedCategory ? s.categoryId === selectedCategory : true
     )
     .sort((a, b) => {
-      if (priceSort === "asc") return Number(a.price) - Number(b.price);
-      if (priceSort === "desc") return Number(b.price) - Number(a.price);
+      if (priceSort === "asc") return Number(a.buy) - Number(b.buy);
+      if (priceSort === "desc") return Number(b.buy) - Number(a.buy);
       return 0;
     });
 
@@ -552,37 +596,106 @@ const tierCtx = getTierContext(souvenir, qty);
             const category = categories.find(
               (c) => c.id === souvenir.categoryId
             );
+            
+            
             return (
               <article
                 key={souvenir.id}
                 className="relative bg-white rounded-2xl shadow-sm hover:shadow-md transform hover:-translate-y-1 transition overflow-hidden"
               >
-                <div className="relative h-56 bg-gradient-to-br from-gray-100 to-white flex items-center justify-center">
-                  {souvenir.imageURL ? (
-                    <img
-                      src={souvenir.imageURL}
-                      alt={souvenir.name}
-                      className="object-contain max-h-full max-w-full transition-transform duration-300 hover:scale-105"
-                    />
-                  ) : souvenir.images && souvenir.images.length > 0 ? (
-                    <img
-                      src={souvenir.images[0].url}
-                      alt={souvenir.name}
-                      className="object-contain max-h-full max-w-full transition-transform duration-300 hover:scale-105"
-                    />
-                  ) : (
-                    <div className="text-gray-400">No image</div>
-                  )}
+<div
+  className="relative h-56 flex items-center justify-center 
+             bg-gradient-to-br from-gray-100 to-white 
+             overflow-hidden"
+  onMouseEnter={() =>
+    clearInterval(autoPlayRef.current[souvenir.id])
+  }
+  onMouseLeave={() => {
+    if (souvenir.images?.length > 1) {
+      autoPlayRef.current[souvenir.id] = setInterval(() => {
+        nextImage(souvenir.id, souvenir.images.length);
+      }, AUTO_PLAY_MS);
+    }
+  }}
+>
 
-                  {(role === "viewer" || role === "admin") && (
-                    <button
-                      onClick={() => addToBasket(souvenir)}
-                      className="absolute bottom-3 right-3 bg-[#708238] text-white px-3 py-1 rounded-full text-sm shadow hover:scale-105"
-                    >
-                      + Add
-                    </button>
-                  )}
-                </div>
+
+  {souvenir.images && souvenir.images.length > 0 ? (
+    <>
+     <img
+  src={souvenir.images[imageIndexMap[souvenir.id] || 0].url}
+  alt={souvenir.name}
+ onClick={() => {
+  clearInterval(autoPlayRef.current[souvenir.id]);
+  setGalleryItem({
+    images: souvenir.images,
+    index: imageIndexMap[souvenir.id] || 0,
+  });
+}}
+
+  className="object-contain max-h-full max-w-full cursor-pointer hover:scale-105 transition"
+/>
+
+
+      {/* LEFT */}
+      {souvenir.images.length > 1 && (
+       <button
+  onClick={() =>
+    prevImage(souvenir.id, souvenir.images.length)
+  }
+  className="absolute left-2 top-1/2 -translate-y-1/2 
+             w-9 h-9 rounded-full flex items-center justify-center
+             shadow transition
+             text-2xl font-bold"
+  style={{ backgroundColor: CREAM, color: OLIVE }}
+>
+  ‹
+</button>
+
+      )}
+
+      {/* RIGHT */}
+      {souvenir.images.length > 1 && (
+        <button
+  onClick={() =>
+    nextImage(souvenir.id, souvenir.images.length)
+  }
+ className="absolute right-2 top-1/2 -translate-y-1/2 
+             w-9 h-9 rounded-full flex items-center justify-center
+             shadow transition
+             text-2xl font-bold"
+  style={{ backgroundColor: CREAM, color: OLIVE }}
+>
+  ›
+</button>
+
+      )}
+
+      {/* DOTS */}
+      <div className="absolute bottom-2 flex gap-1">
+        {souvenir.images.map((_, i) => (
+          <span
+            key={i}
+            className={`w-2 h-2 rounded-full ${
+              (imageIndexMap[souvenir.id] || 0) === i
+                ? "bg-[#708238]"
+                : "bg-gray-300"
+            }`}
+          />
+        ))}
+      </div>
+    </>
+  ) : souvenir.imageURL ? (
+    <img
+      src={souvenir.imageURL}
+      alt={souvenir.name}
+      className="object-contain max-h-full max-w-full"
+    />
+  ) : (
+    <div className="text-gray-400">No image</div>
+  )}
+</div>
+
 
                 <div className="p-4">
                   <div className="flex items-start justify-between">
@@ -917,6 +1030,52 @@ const tierCtx = getTierContext(souvenir, qty);
           </div>
         </div>
       )}
+{galleryItem && (
+  <div className="fixed inset-0 z-[999] bg-black/80 flex items-center justify-center">
+    <button
+      onClick={() => setGalleryItem(null)}
+      className="absolute top-6 right-6 text-white text-3xl"
+    >
+      ✕
+    </button>
+
+    <button
+      onClick={() =>
+        setGalleryItem((g) => ({
+          ...g,
+          index:
+            g.index === 0
+              ? g.images.length - 1
+              : g.index - 1,
+        }))
+      }
+      className="absolute left-6 text-white text-4xl"
+    >
+      ‹
+    </button>
+
+    <img
+      src={galleryItem.images[galleryItem.index].url}
+      className="max-h-[90vh] max-w-[90vw] object-contain"
+    />
+
+    <button
+      onClick={() =>
+        setGalleryItem((g) => ({
+          ...g,
+          index: (g.index + 1) % g.images.length,
+        }))
+      }
+      className="absolute right-6 text-white text-4xl"
+    >
+      ›
+    </button>
+
+    <div className="absolute bottom-6 text-white text-sm">
+      {galleryItem.index + 1} / {galleryItem.images.length}
+    </div>
+  </div>
+)}
 
       {/* Toast */}
       {message && (
