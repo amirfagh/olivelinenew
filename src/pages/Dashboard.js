@@ -23,6 +23,8 @@ function Dashboard() {
   const [souvenirs, setSouvenirs] = useState([]);
   const [categories, setCategories] = useState([]);
 const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
+const inputStyle = { width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd" };
+const selectStyle = { ...inputStyle, background: "#fff" };
 
   // New category and new item form
   const [newCategory, setNewCategory] = useState("");
@@ -284,16 +286,17 @@ const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
         {/* Add Souvenir Form */}
         <div
           style={{
-            display: "flex",
-            gap: "10px",
             marginTop: "30px",
-            flexWrap: "wrap",
-            alignItems: "center",
             background: "#fff",
             padding: 12,
             borderRadius: 8,
+            display: "grid",
+            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            alignItems: "center",
           }}
         >
+
           <input
             type="text"
             placeholder="Name *"
@@ -321,7 +324,14 @@ const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
   {(newItem.tierPricing || []).map((tier, index) => (
   <div
     key={index}
-    style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}
+    style={{
+  display: "flex",
+  gap: 8,
+  marginTop: 6,
+  alignItems: "center",
+  flexWrap: "wrap",
+}}
+
   >
     <input
       type="number"
@@ -469,7 +479,8 @@ const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+
             gap: "20px",
             marginTop: "30px",
           }}
@@ -595,7 +606,17 @@ const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
               zIndex: 9999,
             }}
           >
-            <div style={{ background: "#fff", padding: 20, borderRadius: 8, width: 900 }}>
+           <div
+  style={{
+    background: "#fff",
+    padding: 20,
+    borderRadius: 8,
+    width: "min(900px, 92vw)",
+    maxHeight: "88vh",
+    overflowY: "auto",
+  }}
+>
+
               <h3>Edit Souvenir</h3>
 
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
@@ -632,7 +653,14 @@ const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
   {(editingItem.tierPricing || []).map((tier, index) => (
     <div
       key={index}
-      style={{ display: "flex", gap: 8, marginTop: 6, alignItems: "center" }}
+      style={{
+  display: "flex",
+  gap: 8,
+  marginTop: 6,
+  alignItems: "center",
+  flexWrap: "wrap",
+}}
+
     >
       <input
         type="number"

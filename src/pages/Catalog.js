@@ -61,10 +61,8 @@ if (!tier) {
 }
 
 return buy * Number(tier.multiplier);
-
-
-  return buy * Number(tier.multiplier);
 };
+
 const getNextTierHint = (item, quantity) => {
   const tiers = item.tierPricing;
   const buy = Number(item.buy);
@@ -516,7 +514,8 @@ const finalCustomerId =
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         {/* Header & filters */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+
           <div>
             <h1 className="text-2xl font-semibold" style={{ color: BROWN }}>
               Souvenir Catalog
@@ -526,12 +525,15 @@ const finalCustomerId =
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="bg-white shadow-sm rounded-md p-2 flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+
+            <div className="bg-white shadow-sm rounded-md p-2 flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="text-sm px-3 py-2 rounded-md border focus:outline-none"
+                className="text-sm px-3 py-2 rounded-md border focus:outline-none w-full sm:w-auto"
+
               >
                 <option value="">All Categories</option>
                 {categories.map((cat) => (
@@ -544,7 +546,8 @@ const finalCustomerId =
               <select
                 value={priceSort}
                 onChange={(e) => setPriceSort(e.target.value)}
-                className="text-sm px-3 py-2 rounded-md border focus:outline-none"
+                className="text-sm px-3 py-2 rounded-md border focus:outline-none w-full sm:w-auto"
+
               >
                 <option value="">Sort by Price</option>
                 <option value="asc">Lowest to Highest</option>
@@ -568,7 +571,7 @@ const finalCustomerId =
                 className="relative inline-flex items-center gap-2 px-4 py-2 rounded-full shadow bg-[#708238] text-white hover:scale-105 transform transition"
               >
                 <span className="text-lg">🛒</span>
-                <span className="hidden sm:inline">Basket</span>
+<span className="inline">Basket</span>
                 {basket.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
                     {basket.length}
@@ -713,7 +716,9 @@ const tierCtx = getTierContext(souvenir, qty);
 {nextTier && (
   
   <div className="
-  absolute top-4 right-4
+  absolute top-3 right-3 sm:top-4 sm:right-4
+max-w-[80%] sm:max-w-none
+
   bg-red-200 text-red-800
   text-xs font-semibold
   px-3 py-1
@@ -726,7 +731,9 @@ const tierCtx = getTierContext(souvenir, qty);
 )}
 {tierCtx?.isBestPrice && (
   <div className="
-    absolute top-4 right-4
+    absolute top-3 right-3 sm:top-4 sm:right-4
+max-w-[80%] sm:max-w-none
+
     bg-green-100 text-green-700
     text-xs font-semibold
     px-3 py-1
@@ -771,13 +778,15 @@ const tierCtx = getTierContext(souvenir, qty);
                     {souvenir.description || "No description"}
                   </p>
 
-                  <div className="flex items-center justify-between mt-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
+
                     <span className="inline-block bg-[#EDE6D6] text-[#4E342E] text-xs px-2 py-1 rounded-md">
                       {category ? category.name : "-"}
                     </span>
 
                     {(role === "viewer" || role === "admin") && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+
                         <div className="flex items-center border rounded-md overflow-hidden">
                           <button
                             onClick={() =>
@@ -839,7 +848,8 @@ const tierCtx = getTierContext(souvenir, qty);
 
                         <button
                           onClick={() => addToBasket(souvenir)}
-                          className="px-3 py-2 bg-[#708238] text-white rounded-md text-sm hover:bg-[#5b6c2e]"
+                          className="w-full sm:w-auto px-3 py-2 bg-[#708238] text-white rounded-md text-sm hover:bg-[#5b6c2e]"
+
                         >
                           Add to basket
                         </button>
@@ -861,16 +871,26 @@ const tierCtx = getTierContext(souvenir, qty);
 
       {/* Basket Drawer */}
       {showBasket && (
-        <div className="fixed top-0 right-0 w-80 h-full bg-white shadow-lg p-5 z-50 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-semibold text-[#4E342E]">Basket</h3>
-            <button
-              onClick={() => setShowBasket(false)}
-              className="text-xl text-gray-600"
-            >
-              ✖
-            </button>
-          </div>
+        <div className="fixed top-0 right-0 w-[92vw] max-w-sm h-full bg-white shadow-lg p-5 z-50 flex flex-col">
+
+          <div className="relative mb-4">
+  <h3
+    className="text-lg sm:text-xl font-semibold text-center"
+    style={{ color: BROWN }}
+  >
+    Basket
+  </h3>
+
+  <button
+    onClick={() => setShowBasket(false)}
+    className="absolute right-0 top-1/2 -translate-y-1/2 text-2xl leading-none text-gray-700 px-2"
+    aria-label="Close basket"
+  >
+    ✖
+  </button>
+</div>
+
+
 
           <div className="flex-1 overflow-y-auto">
             {basket.length === 0 ? (
@@ -955,7 +975,8 @@ const tierCtx = getTierContext(souvenir, qty);
       {/* Confirm modal */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+         <div className="bg-white rounded-xl w-[92vw] max-w-md p-6 max-h-[85vh] overflow-y-auto">
+
             <h3 className="text-lg font-semibold text-[#4E342E]">
               Confirm Order
             </h3>
@@ -1049,7 +1070,8 @@ const tierCtx = getTierContext(souvenir, qty);
               : g.index - 1,
         }))
       }
-      className="absolute left-6 text-white text-4xl"
+      className="absolute left-3 sm:left-6 text-white text-4xl"
+
     >
       ‹
     </button>
@@ -1066,7 +1088,8 @@ const tierCtx = getTierContext(souvenir, qty);
           index: (g.index + 1) % g.images.length,
         }))
       }
-      className="absolute right-6 text-white text-4xl"
+      className="absolute right-3 sm:right-6 text-white text-4xl"
+
     >
       ›
     </button>

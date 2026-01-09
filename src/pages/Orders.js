@@ -99,17 +99,28 @@ export default function Orders() {
 
         {/* --- GRID: ALL STATUSES VISIBLE --- */}
 <div
-  className="grid gap-4"
+  className="
+    flex gap-4 overflow-x-auto pb-3
+    md:grid md:gap-4 md:overflow-x-visible md:pb-0
+  "
   style={{
-    gridTemplateColumns: `repeat(${STATUS_STEPS.length}, minmax(180px, 1fr))`,
+    // desktop only (md+)
+    ...(window.innerWidth >= 768
+      ? { gridTemplateColumns: `repeat(${STATUS_STEPS.length}, minmax(180px, 1fr))` }
+      : {}),
   }}
 >
+
   {STATUS_STEPS.map((status) => (
     <div
-      key={status.key}
-      className="rounded-lg shadow-sm flex flex-col"
-      style={{ backgroundColor: SOFTWHITE }}
-    >
+  key={status.key}
+  className="rounded-lg shadow-sm flex flex-col flex-shrink-0 w-[85vw] sm:w-[360px] md:w-auto"
+  style={{ backgroundColor: SOFTWHITE }}
+>
+<p className="text-xs mb-3 opacity-70 md:hidden" style={{ color: BROWN }}>
+  Swipe sideways to view statuses →
+</p>
+
       {/* COLUMN HEADER */}
       <h3
         className="text-sm font-semibold text-center py-2 border-b"
@@ -119,7 +130,8 @@ export default function Orders() {
       </h3>
 
       {/* COLUMN CONTENT */}
-      <div className="space-y-2 flex-1 overflow-y-auto px-2 py-2">
+     <div className="space-y-2 flex-1 overflow-y-auto px-2 py-2 max-h-[70vh] md:max-h-none">
+
         {orders
           .filter((o) => o.status === status.key)
           .map((order) => (
