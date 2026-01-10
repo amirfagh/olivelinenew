@@ -26,21 +26,24 @@ const EMPTY_TIER = { min: 1, max: 1, multiplier: 1 };
 const inputStyle = { width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #ddd" };
 const selectStyle = { ...inputStyle, background: "#fff" };
 
-  // New category and new item form
+  const [manufacturers, setManufacturers] = useState([]);
+const [newManufacturer, setNewManufacturer] = useState("");
+
   const [newCategory, setNewCategory] = useState("");
   const [newItem, setNewItem] = useState({
-    name: "",
-    manufacturer: "",
-    buy: "",
-    description: "",
-    size: "",
-    weight: "",
-    material: "",
-    imageURL: "",
-    categoryId: "",
-    images: [],
-    tierPricing: [],
-  });
+  name: "",
+  manufacturerId: "",
+  buy: "",
+  description: "",
+  size: "",
+  weight: "",
+  material: "",
+  imageURL: "",
+  categoryId: "",
+  images: [],
+  tierPricing: [],
+});
+
   const [addFiles, setAddFiles] = useState([]);
 
   // Edit modal
@@ -52,6 +55,10 @@ const selectStyle = { ...inputStyle, background: "#fff" };
 
   /* Fetch categories & souvenirs */
   useEffect(() => {
+    const unsubMan = onSnapshot(collection(db, "manufacturers"), (snap) => {
+  setManufacturers(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+});
+
     const unsubCats = onSnapshot(collection(db, "categories"), (snap) => {
       setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
@@ -61,10 +68,17 @@ const selectStyle = { ...inputStyle, background: "#fff" };
     });
 
     return () => {
-      unsubCats();
-      unsubSouvs();
-    };
+  unsubCats();
+  unsubSouvs();
+  unsubMan();
+};
+
   }, []);
+const addManufacturer = async () => {
+  if (!newManufacturer.trim()) return;
+  await addDoc(collection(db, "manufacturers"), { name: newManufacturer.trim() });
+  setNewManufacturer("");
+};
 
   /* Add Category */
   const addCategory = async () => {
@@ -122,7 +136,8 @@ const selectStyle = { ...inputStyle, background: "#fff" };
     // REQUIRED FIELDS
     if (
       !newItem.name ||
-      !newItem.manufacturer ||
+      !newItem.manufacturerId
+ ||
       !newItem.buy ||
       !newItem.description ||
       !newItem.size ||
@@ -135,7 +150,8 @@ const selectStyle = { ...inputStyle, background: "#fff" };
 
     const docRef = await addDoc(collection(db, "souvenirs"), {
       name: newItem.name,
-      manufacturer: newItem.manufacturer,
+     manufacturerId: newItem.manufacturerId,
+
       buy: newItem.buy,
       description: newItem.description,
       size: newItem.size,
@@ -204,7 +220,7 @@ const selectStyle = { ...inputStyle, background: "#fff" };
 
     await updateDoc(docRef, {
       name: editingItem.name,
-      manufacturer: editingItem.manufacturer,
+      manufacturerId: editingItem.manufacturerId,
       buy: editingItem.buy,
       description: editingItem.description,
       size: editingItem.size,
@@ -248,6 +264,39 @@ const selectStyle = { ...inputStyle, background: "#fff" };
       <Navbar />
       <div style={{ padding: "30px" }}>
         <h2 style={{ color: "#4E342E" }}>Admin Dashboard (OliveLine)</h2>
+{/* Manufacturer Section */}
+<div style={{ marginTop: "20px" }}>
+  <h3 style={{ color: "#4E342E" }}>Add Manufacturer</h3>
+  <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+    <input
+      type="text"
+      placeholder="Manufacturer Name"
+      value={newManufacturer}
+      onChange={(e) => setNewManufacturer(e.target.value)}
+    />
+    <button
+      onClick={addManufacturer}
+      style={{
+        backgroundColor: "#4E342E",
+        color: "white",
+        border: "none",
+        borderRadius: "6px",
+        padding: "8px 15px",
+        cursor: "pointer",
+      }}
+    >
+      Add Manufacturer
+    </button>
+  </div>
+
+  <div style={{ marginTop: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+    {manufacturers.map((m) => (
+      <div key={m.id} style={{ background: "#FFF", padding: "6px 10px", borderRadius: 6 }}>
+        {m.name}
+      </div>
+    ))}
+  </div>
+</div>
 
         {/* Category Section */}
         <div style={{ marginTop: "20px" }}>
@@ -304,12 +353,18 @@ const selectStyle = { ...inputStyle, background: "#fff" };
             onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
           />
 
-          <input
-            type="text"
-            placeholder="Manufacturer *"
-            value={newItem.manufacturer}
-            onChange={(e) => setNewItem({ ...newItem, manufacturer: e.target.value })}
-          />
+          <select
+  value={newItem.manufacturerId}
+  onChange={(e) => setNewItem({ ...newItem, manufacturerId: e.target.value })}
+>
+  <option value="">Choose Manufacturer *</option>
+  {manufacturers.map((m) => (
+    <option key={m.id} value={m.id}>
+      {m.name}
+    </option>
+  ))}
+</select>
+
 
           <input
             type="number"
@@ -487,6 +542,9 @@ const selectStyle = { ...inputStyle, background: "#fff" };
         >
           {souvenirs.map((s) => {
             const cat = categories.find((c) => c.id === s.categoryId);
+
+            const man = manufacturers.find((m) => m.id === s.manufacturerId);
+
             return (
               <div
                 key={s.id}
@@ -517,7 +575,7 @@ const selectStyle = { ...inputStyle, background: "#fff" };
                 </div>
 
                 <h3 style={{ color: "#708238", marginTop: 12 }}>{s.name}</h3>
-                <p>{s.manufacturer}</p>
+                <p><b>Manufacturer:</b> {man?.name || "—"}</p>
                 <p><b>Buy:</b> {s.buy} ₪</p>
                 <p><b>Description:</b> {s.description}</p>
                 <p><b>Size:</b> {s.size}</p>
@@ -629,14 +687,18 @@ const selectStyle = { ...inputStyle, background: "#fff" };
                   }
                 />
 
-                <input
-                  type="text"
-                  placeholder="Manufacturer"
-                  value={editingItem.manufacturer}
-                  onChange={(e) =>
-                    setEditingItem({ ...editingItem, manufacturer: e.target.value })
-                  }
-                />
+                <select
+  value={editingItem.manufacturerId}
+  onChange={(e) => setEditingItem({ ...editingItem, manufacturerId: e.target.value })}
+>
+  <option value="">Choose Manufacturer</option>
+  {manufacturers.map((m) => (
+    <option key={m.id} value={m.id}>
+      {m.name}
+    </option>
+  ))}
+</select>
+
 
                 <input
                   type="number"

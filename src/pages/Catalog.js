@@ -18,6 +18,74 @@ const OLIVE = "#708238";
 const CREAM = "#EDE6D6";
 const BROWN = "#4E342E";
 const SOFTWHITE = "#FAF9F6";
+function QuantityStepper({ value, onChange, min = 1, max = 9999 }) {
+  const qty = Number(value || min);
+  const decDisabled = qty <= min;
+
+  return (
+    
+    <div
+      className="
+        inline-flex items-center
+        rounded-xl overflow-hidden
+        border shadow-sm
+      "
+      style={{ borderColor: "#708238", backgroundColor: "#FAF9F6" }}
+    >
+      <button
+        type="button"
+        onClick={() => !decDisabled && onChange(qty - 1)}
+        disabled={decDisabled}
+        className={`
+          w-10 h-10 flex items-center justify-center
+          text-xl font-semibold
+          transition
+          ${decDisabled ? "opacity-40 cursor-not-allowed" : "hover:bg-[#EDE6D6] active:scale-95"}
+        `}
+        style={{ color: "#4E342E" }}
+        aria-label="Decrease quantity"
+      >
+        −
+      </button>
+
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={qty}
+        onChange={(e) => {
+          const n = Number(e.target.value);
+          if (Number.isNaN(n)) return;
+          onChange(Math.max(min, Math.min(max, n)));
+        }}
+        className="
+          qty-input
+          w-14 h-10 text-center text-sm font-semibold
+          outline-none
+          border-l border-r
+          bg-white
+        "
+        style={{ borderColor: "#708238", color: "#4E342E" }}
+      />
+
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, qty + 1))}
+        className="
+          w-10 h-10 flex items-center justify-center
+          text-xl font-semibold
+          hover:bg-[#EDE6D6] active:scale-95 transition
+        "
+        style={{ color: "#4E342E" }}
+        aria-label="Increase quantity"
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 
 export default function Catalog() {
   const [souvenirs, setSouvenirs] = useState([]);
@@ -30,6 +98,8 @@ export default function Catalog() {
   const [customerId, setCustomerId] = useState(null);
 const [imageIndexMap, setImageIndexMap] = useState({});
 const [galleryItem, setGalleryItem] = useState(null);
+const [showFilters, setShowFilters] = useState(false);
+
 // { images: [], index: 0 }
 const hoverTimerRef = React.useRef(null);
 const AUTO_PLAY_MS = 2500;
@@ -566,19 +636,38 @@ const finalCustomerId =
             </div>
 
             {(role === "viewer" || role === "admin") && (
-              <button
-                onClick={() => setShowBasket(true)}
-                className="relative inline-flex items-center gap-2 px-4 py-2 rounded-full shadow bg-[#708238] text-white hover:scale-105 transform transition"
-              >
-                <span className="text-lg">🛒</span>
-<span className="inline">Basket</span>
-                {basket.length > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
-                    {basket.length}
-                  </span>
-                )}
-              </button>
-            )}
+  <button
+    onClick={() => setShowBasket(true)}
+    className="
+      fixed bottom-6 right-6 z-50
+      inline-flex items-center gap-2
+      px-4 py-3 rounded-full shadow-lg
+      bg-[#708238] text-white
+      hover:scale-105 active:scale-95
+      transition
+    "
+    aria-label="Open basket"
+  >
+    <span className="text-xl">🛒</span>
+    <span className="hidden sm:inline font-medium">Basket</span>
+
+    {basket.length > 0 && (
+      <span className="
+        ml-1
+        bg-red-500 text-white
+        rounded-full
+        min-w-[24px] h-6
+        px-2
+        flex items-center justify-center
+        text-xs font-semibold
+      ">
+        {basket.length}
+      </span>
+    )}
+  </button>
+)}
+
+            
           </div>
         </div>
 
@@ -787,64 +876,21 @@ max-w-[80%] sm:max-w-none
                     {(role === "viewer" || role === "admin") && (
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
 
-                        <div className="flex items-center border rounded-md overflow-hidden">
-                          <button
-                            onClick={() =>
-                              setSouvenirs((prev) =>
-                                prev.map((it) =>
-                                  it.id === souvenir.id
-                                    ? {
-                                        ...it,
-                                        quantity: Math.max(
-                                          1,
-                                          Number(it.quantity) - 1
-                                        ),
-                                      }
-                                    : it
-                                )
-                              )
-                            }
-                            className="px-3 py-1 text-sm"
-                          >
-                            −
-                          </button>
-                          <input
-                            type="number"
-                            min={1}
-                            value={souvenir.quantity}
-                            onChange={(e) => {
-                              const val =
-                                e.target.value === ""
-                                  ? ""
-                                  : Math.max(1, Number(e.target.value));
-                              setSouvenirs((prev) =>
-                                prev.map((it) =>
-                                  it.id === souvenir.id
-                                    ? { ...it, quantity: val }
-                                    : it
-                                )
-                              );
-                            }}
-                            className="w-14 text-center text-sm outline-none py-1"
-                          />
-                          <button
-                            onClick={() =>
-                              setSouvenirs((prev) =>
-                                prev.map((it) =>
-                                  it.id === souvenir.id
-                                    ? {
-                                        ...it,
-                                        quantity: Number(it.quantity) + 1,
-                                      }
-                                    : it
-                                )
-                              )
-                            }
-                            className="px-3 py-1 text-sm"
-                          >
-                            +
-                          </button>
-                        </div>
+                  <div className="flex justify-center sm:justify-start">
+  <QuantityStepper
+    value={souvenir.quantity}
+    onChange={(newQty) => {
+      setSouvenirs((prev) =>
+        prev.map((it) =>
+          it.id === souvenir.id ? { ...it, quantity: newQty } : it
+        )
+      );
+    }}
+  />
+</div>
+
+
+
 
                         <button
                           onClick={() => addToBasket(souvenir)}
@@ -916,21 +962,27 @@ max-w-[80%] sm:max-w-none
                     <div className="flex-1">
                       <p className="font-medium">{item.name}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateBasketQuantity(
-                              item.id,
-                              Number(e.target.value)
-                            )
-                          }
-                          className="w-16 p-1 border rounded text-sm"
-                        />
-                        <span className="text-sm text-gray-700">
-                          {Number(item.price).toFixed(2)} NIS
-                        </span>
+                        <QuantityStepper
+  value={item.quantity}
+  onChange={(newQty) => updateBasketQuantity(item.id, newQty)}
+/>
+
+                        <div className="text-sm" style={{ color: "#4E342E" }}>
+  <div className="flex items-center justify-between gap-3">
+    <span className="text-xs text-gray-500">Unit</span>
+    <span className="font-semibold">
+      {Number(item.price).toFixed(2)} NIS
+    </span>
+  </div>
+
+  <div className="flex items-center justify-between gap-3 mt-1">
+    <span className="text-xs text-gray-500">Line</span>
+    <span className="font-semibold" style={{ color: "#708238" }}>
+      {(Number(item.price) * Number(item.quantity)).toFixed(2)} NIS
+    </span>
+  </div>
+</div>
+
                       </div>
                     </div>
 
@@ -1112,6 +1164,8 @@ max-w-[80%] sm:max-w-none
           {message.text}
         </div>
       )}
+      
     </div>
+    
   );
 }
