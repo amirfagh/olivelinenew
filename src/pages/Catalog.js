@@ -306,7 +306,9 @@ useEffect(() => {
   }, []);
 
   const displayedSouvenirs = souvenirs
-    .filter((s) =>
+  .filter((s) => (s.available ?? true) === true)  
+  .filter((s) =>
+      
       selectedCategory ? s.categoryId === selectedCategory : true
     )
     .sort((a, b) => {

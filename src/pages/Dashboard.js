@@ -42,6 +42,7 @@ const [newManufacturer, setNewManufacturer] = useState("");
   categoryId: "",
   images: [],
   tierPricing: [],
+    available: true,
 });
 
   const [addFiles, setAddFiles] = useState([]);
@@ -161,6 +162,7 @@ const addManufacturer = async () => {
       categoryId: newItem.categoryId,
       images: [],
        tierPricing: newItem.tierPricing || [],
+       available: newItem.available ?? true,
       createdAt: Date.now(),
     });
 
@@ -182,6 +184,8 @@ const addManufacturer = async () => {
       categoryId: "",
       images: [],
         tierPricing: [],
+        available: true,
+
     });
     setAddFiles([]);
   };
@@ -372,6 +376,15 @@ const addManufacturer = async () => {
             value={newItem.buy}
             onChange={(e) => setNewItem({ ...newItem, buy: e.target.value })}
           />
+          <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+  <input
+    type="checkbox"
+    checked={newItem.available ?? true}
+    onChange={(e) => setNewItem({ ...newItem, available: e.target.checked })}
+  />
+  <span>Available</span>
+</label>
+
 {/* Tier Pricing (per item) */}
 <div style={{ width: "100%" }}>
   <strong>Tier Pricing (per item)</strong>
@@ -582,6 +595,28 @@ const addManufacturer = async () => {
                 <p><b>Material:</b> {s.material}</p>
                 {s.weight && <p><b>Weight:</b> {s.weight}</p>}
                 <p><b>Category:</b> {cat?.name || "—"}</p>
+<p>
+  <b>Status:</b>{" "}
+  <span style={{ color: (s.available ?? true) ? "#2E7D32" : "#B00020" }}>
+    {(s.available ?? true) ? "Available" : "Not available"}
+  </span>
+</p>
+
+<button
+  onClick={async () => {
+    await updateDoc(doc(db, "souvenirs", s.id), { available: !(s.available ?? true) });
+  }}
+  style={{
+    backgroundColor: (s.available ?? true) ? "#B00020" : "#708238",
+    color: "white",
+    border: "none",
+    borderRadius: "6px",
+    padding: "6px 12px",
+    cursor: "pointer",
+  }}
+>
+  {(s.available ?? true) ? "Set Not Available" : "Set Available"}
+</button>
 
                 {/* images thumbnails */}
                 <div style={{ display: "flex", gap: 8, marginTop: 8, overflowX: "auto" }}>
