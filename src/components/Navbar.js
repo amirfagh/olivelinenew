@@ -52,9 +52,8 @@ function Navbar() {
       { to: "/admin-customers", label: "Customers" },
       { to: "/orders", label: "Orders" },
       { to: "/admin-order-approval", label: "Approvals" },
-      { to: "/admin-add-user", label: "Add User" },
       { to: "/catalog", label: "Catalog" },
-      { to: "/Cusromer-add", label: "Customer Add" } // note: route has typo? keeping as-is
+       { to: "/ManufacturersReports", label: "Manufacturers Reports" }
     );
   }
 

@@ -11,6 +11,7 @@ import AdminCustomers from "./pages/AdminCustomers";
 import MyOrders from "./pages/MyOrders";
 import AdminOrderApproval from "./pages/AdminOrderApproval";
 import CustomerAdd from "./pages/AdminCreateCustomer";
+import ManufacturersReports from "./pages/ManufacturersReports";
 function App() {
   return (
     <Router>
@@ -29,6 +30,12 @@ function App() {
     <AdminAddUser />
   </RequireAdmin>
 } />
+<Route path="/ManufacturersReports" element={
+  <RequireAdmin>
+    <ManufacturersReports />
+  </RequireAdmin>
+} />
+
 <Route
   path="/admin-customers"
   element={
