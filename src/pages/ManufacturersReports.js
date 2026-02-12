@@ -76,13 +76,18 @@ async function fetchDoneOrdersInRange(fromISO, toISO) {
   const fromMs = startOfDay(new Date(fromISO)).getTime();
   const toMs = endOfDay(new Date(toISO)).getTime();
 
-  const q1 = query(collection(db, "orders"), where("quotation.status", "==", "done"));
+  const q1 = query(
+    collection(db, "orders"),
+    where("quotation.status", "==", "done")
+  );
   const q2 = query(collection(db, "orders"), where("status", "==", "done"));
 
   const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
 
   const map = new Map();
-  [...s1.docs, ...s2.docs].forEach((d) => map.set(d.id, { id: d.id, ...d.data() }));
+  [...s1.docs, ...s2.docs].forEach((d) =>
+    map.set(d.id, { id: d.id, ...d.data() })
+  );
 
   const allDone = Array.from(map.values());
 
@@ -106,9 +111,14 @@ async function fetchSouvenirsByIds(productIds) {
   const map = new Map();
 
   for (const idsChunk of chunks) {
-    const qy = query(collection(db, "souvenirs"), where("__name__", "in", idsChunk));
+    const qy = query(
+      collection(db, "souvenirs"),
+      where("__name__", "in", idsChunk)
+    );
     const snap = await getDocs(qy);
-    snap.forEach((docSnap) => map.set(docSnap.id, { id: docSnap.id, ...docSnap.data() }));
+    snap.forEach((docSnap) =>
+      map.set(docSnap.id, { id: docSnap.id, ...docSnap.data() })
+    );
   }
   return map;
 }
@@ -158,7 +168,14 @@ function exportSummaryDetails({ summaryRows, detailRows, meta }) {
 
   const summaryAOA = [
     ...header,
-    ["Manufacturer", "ManufacturerId", "OrdersCount", "LinesCount", "TotalQty", "TotalToPay"],
+    [
+      "Manufacturer",
+      "ManufacturerId",
+      "OrdersCount",
+      "LinesCount",
+      "TotalQty",
+      "TotalToPay",
+    ],
     ...summaryRows.map((r) => [
       r.manufacturerName,
       r.manufacturerId,
@@ -168,7 +185,14 @@ function exportSummaryDetails({ summaryRows, detailRows, meta }) {
       r.totalToPay,
     ]),
     [],
-    ["Grand Total", "", "", "", "", summaryRows.reduce((s, r) => s + safeNum(r.totalToPay), 0)],
+    [
+      "Grand Total",
+      "",
+      "",
+      "",
+      "",
+      summaryRows.reduce((s, r) => s + safeNum(r.totalToPay), 0),
+    ],
   ];
 
   const detailsAOA = [
@@ -182,15 +206,8 @@ function exportSummaryDetails({ summaryRows, detailRows, meta }) {
       "ProductId",
       "ProductName",
       "Qty",
-      "BuyBase",
-      "TierMultiplierUsed",
-      "BuyUnitPrice",
-      "BuyLineTotal",
-      "SellUnitPrice",
-      "SellLineTotal",
-      "IsLegacyBuyCalc",
-      "MissingManufacturerId",
-      "MissingProductDoc",
+      "Buy Unit",
+      "Line Total",
     ],
     ...detailRows.map((r) => [
       r.manufacturerName,
@@ -201,15 +218,8 @@ function exportSummaryDetails({ summaryRows, detailRows, meta }) {
       r.productId,
       r.productName,
       r.qty,
-      r.buyBase,
-      r.tierMultiplierUsed,
-      r.buyUnitPrice,
-      r.buyLineTotal,
-      r.sellUnitPrice,
-      r.sellLineTotal,
-      r.isLegacyBuyCalc ? "YES" : "NO",
-      r.missingManufacturerId ? "YES" : "NO",
-      r.missingProductDoc ? "YES" : "NO",
+      Number(r.buyUnitPrice || 0).toFixed(2),
+      Number(r.buyLineTotal || 0).toFixed(2),
     ]),
   ];
 
@@ -220,14 +230,29 @@ function exportSummaryDetails({ summaryRows, detailRows, meta }) {
   );
   XLSX.utils.book_append_sheet(
     wb,
-    aoaToSheetWithWidths(detailsAOA, [24, 18, 18, 22, 14, 18, 34, 8, 10, 14, 12, 14, 12, 14, 14, 18, 16]),
+    aoaToSheetWithWidths(detailsAOA, [
+      24, 18, 18, 22, 14, 18, 34, 8, 12, 14,
+    ]),
     "Details"
   );
 
-  const safeName = String(meta.manufacturerName || "all").replace(/[\\/:*?"<>|]/g, "_");
-  exportWorkbook(wb, `manufacturer_payables_${safeName}_${meta.fromISO}_to_${meta.toISO}.xlsx`);
+  const safeName = String(meta.manufacturerName || "all").replace(
+    /[\\/:*?"<>|]/g,
+    "_"
+  );
+  exportWorkbook(
+    wb,
+    `manufacturer_payables_${safeName}_${meta.fromISO}_to_${meta.toISO}.xlsx`
+  );
 }
 
+/**
+ * ✅ Manufacturer Statement (what you send to the manufacturer)
+ * - NO sell prices
+ * - NO profit
+ * - NO avg buy unit
+ * - Shows only qty + totals to pay
+ */
 function exportManufacturerStatement({ statement, meta }) {
   const wb = XLSX.utils.book_new();
 
@@ -238,38 +263,46 @@ function exportManufacturerStatement({ statement, meta }) {
 
   const productsAOA = [
     ...header,
-    ["Product", "ProductId", "Total Qty", "Avg Buy Unit", "Total To Pay"],
+    ["Product", "ProductId", "Total Qty", "Total To Pay"],
     ...statement.products.map((p) => [
       p.productName,
       p.productId,
       p.totalQty,
-      p.avgBuyUnitPrice,
       p.totalToPay,
     ]),
     [],
-    ["Total To Pay", "", "", "", statement.totalToPay],
+    ["Total To Pay", "", "", statement.totalToPay],
   ];
 
   const linesAOA = [
     ...header,
-    ["OrderId", "OrderDate", "CustomerId", "Product", "Qty", "BuyUnit", "Multiplier", "LineTotal", "LegacyCalc"],
+    ["OrderId", "OrderDate", "CustomerId", "Product", "Qty", "Buy Unit", "Line Total"],
     ...statement.lines.map((l) => [
       l.orderId,
       l.orderDate,
       l.customerId,
       l.productName,
       l.qty,
-      l.buyUnitPrice,
-      l.tierMultiplierUsed,
-      l.buyLineTotal,
-      l.isLegacyBuyCalc ? "YES" : "NO",
+      Number(l.buyUnitPrice || 0).toFixed(2),
+      Number(l.buyLineTotal || 0).toFixed(2),
     ]),
   ];
 
-  XLSX.utils.book_append_sheet(wb, aoaToSheetWithWidths(productsAOA, [34, 18, 12, 12, 14]), "Products");
-  XLSX.utils.book_append_sheet(wb, aoaToSheetWithWidths(linesAOA, [18, 22, 14, 34, 8, 10, 10, 12, 10]), "Lines");
+  XLSX.utils.book_append_sheet(
+    wb,
+    aoaToSheetWithWidths(productsAOA, [36, 18, 12, 14]),
+    "Products"
+  );
+  XLSX.utils.book_append_sheet(
+    wb,
+    aoaToSheetWithWidths(linesAOA, [18, 22, 14, 34, 8, 12, 14]),
+    "Lines"
+  );
 
-  const safeM = String(meta.manufacturerName || "manufacturer").replace(/[\\/:*?"<>|]/g, "_");
+  const safeM = String(meta.manufacturerName || "manufacturer").replace(
+    /[\\/:*?"<>|]/g,
+    "_"
+  );
   exportWorkbook(
     wb,
     `manufacturer_statement_${safeM}_${meta.fromISO}_to_${meta.toISO}.xlsx`
@@ -279,12 +312,18 @@ function exportManufacturerStatement({ statement, meta }) {
 function exportAllStatementsWorkbook({ statementsByManufacturer, meta }) {
   const wb = XLSX.utils.book_new();
 
-  // Add a top-level summary sheet
   const header = buildHeader({ ...meta, title: "All Manufacturer Statements" });
 
   const summaryAOA = [
     ...header,
-    ["Manufacturer", "ManufacturerId", "ProductsCount", "LinesCount", "Total Qty", "Total To Pay"],
+    [
+      "Manufacturer",
+      "ManufacturerId",
+      "ProductsCount",
+      "LinesCount",
+      "Total Qty",
+      "Total To Pay",
+    ],
     ...Object.values(statementsByManufacturer).map((st) => [
       st.manufacturerName,
       st.manufacturerId,
@@ -301,9 +340,11 @@ function exportAllStatementsWorkbook({ statementsByManufacturer, meta }) {
     "Summary"
   );
 
-  // One sheet per manufacturer with per-product breakdown
+  // One sheet per manufacturer (manufacturer-friendly)
   Object.values(statementsByManufacturer).forEach((st) => {
-    const sh = safeSheetName(st.manufacturerName || st.manufacturerId || "Manufacturer");
+    const sh = safeSheetName(
+      st.manufacturerName || st.manufacturerId || "Manufacturer"
+    );
 
     const aoa = [
       ...buildHeader({
@@ -312,22 +353,82 @@ function exportAllStatementsWorkbook({ statementsByManufacturer, meta }) {
         manufacturerName: st.manufacturerName,
         note: st.note || "",
       }),
-      ["Product", "ProductId", "Total Qty", "Avg Buy Unit", "Total To Pay"],
-      ...st.products.map((p) => [
-        p.productName,
-        p.productId,
-        p.totalQty,
-        p.avgBuyUnitPrice,
-        p.totalToPay,
-      ]),
+      ["Product", "ProductId", "Total Qty", "Total To Pay"],
+      ...st.products.map((p) => [p.productName, p.productId, p.totalQty, p.totalToPay]),
       [],
-      ["Total To Pay", "", "", "", st.totalToPay],
+      ["Total To Pay", "", "", st.totalToPay],
     ];
 
-    XLSX.utils.book_append_sheet(wb, aoaToSheetWithWidths(aoa, [34, 18, 12, 12, 14]), sh);
+    XLSX.utils.book_append_sheet(
+      wb,
+      aoaToSheetWithWidths(aoa, [36, 18, 12, 14]),
+      sh
+    );
   });
 
   exportWorkbook(wb, `all_manufacturer_statements_${meta.fromISO}_to_${meta.toISO}.xlsx`);
+}
+
+/**
+ * ✅ Internal Sales Report (FOR YOU ONLY)
+ * Includes revenue, cost, profit, margin + breakdowns.
+ */
+function exportSalesReportWorkbook({ salesReport }) {
+  const wb = XLSX.utils.book_new();
+
+  const header = buildHeader({
+    title: "Internal Sales Report",
+    manufacturerName: "All (internal)",
+    fromISO: salesReport.fromISO,
+    toISO: salesReport.toISO,
+    note: "Revenue = Sell totals, Cost = Payable totals, Profit = Revenue - Cost",
+  });
+
+  const summaryAOA = [
+    ...header,
+    ["Metric", "Value"],
+    ["Orders", salesReport.ordersCount],
+    ["Total Qty", salesReport.qty],
+    ["Revenue", salesReport.revenue],
+    ["Cost", salesReport.cost],
+    ["Profit", salesReport.profit],
+    ["Margin %", salesReport.margin],
+  ];
+
+  const manAOA = [
+    ...header,
+    ["Manufacturer", "Orders", "Qty", "Revenue", "Cost", "Profit", "Margin %"],
+    ...salesReport.byManufacturer.map((m) => [
+      m.manufacturerName,
+      m.ordersCount,
+      m.qty,
+      m.revenue,
+      m.cost,
+      m.profit,
+      m.margin,
+    ]),
+  ];
+
+  const prodAOA = [
+    ...header,
+    ["Product", "ProductId", "Manufacturer", "Qty", "Revenue", "Cost", "Profit", "Margin %"],
+    ...salesReport.byProduct.map((p) => [
+      p.productName,
+      p.productId,
+      p.manufacturerName,
+      p.qty,
+      p.revenue,
+      p.cost,
+      p.profit,
+      p.margin,
+    ]),
+  ];
+
+  XLSX.utils.book_append_sheet(wb, aoaToSheetWithWidths(summaryAOA, [22, 18]), "Summary");
+  XLSX.utils.book_append_sheet(wb, aoaToSheetWithWidths(manAOA, [28, 10, 10, 14, 14, 14, 10]), "By Manufacturer");
+  XLSX.utils.book_append_sheet(wb, aoaToSheetWithWidths(prodAOA, [34, 18, 24, 10, 14, 14, 14, 10]), "By Product");
+
+  exportWorkbook(wb, `internal_sales_report_${salesReport.fromISO}_to_${salesReport.toISO}.xlsx`);
 }
 
 // ---------- Main Component ----------
@@ -348,6 +449,7 @@ export default function ManufacturersReports() {
   const [sortDir, setSortDir] = useState("desc"); // asc | desc
 
   const [includeVatOnBuy, setIncludeVatOnBuy] = useState(false);
+  const [payByBuyBaseOnly, setPayByBuyBaseOnly] = useState(true);
 
   const [expandedManufacturerId, setExpandedManufacturerId] = useState(null);
 
@@ -356,6 +458,9 @@ export default function ManufacturersReports() {
 
   // report data
   const [report, setReport] = useState(null);
+
+  // ✅ internal sales report
+  const [salesReport, setSalesReport] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -372,12 +477,17 @@ export default function ManufacturersReports() {
   const manufacturerOptions = useMemo(() => {
     const q = manufacturerSearch.trim().toLowerCase();
     if (!q) return manufacturers;
-    return manufacturers.filter((m) => (m.name || "").toLowerCase().includes(q));
+    return manufacturers.filter((m) =>
+      (m.name || "").toLowerCase().includes(q)
+    );
   }, [manufacturers, manufacturerSearch]);
 
   const selectedManufacturerName = useMemo(() => {
     if (selectedManufacturerId === "all") return "All manufacturers";
-    return manufacturers.find((m) => m.id === selectedManufacturerId)?.name || "Selected";
+    return (
+      manufacturers.find((m) => m.id === selectedManufacturerId)?.name ||
+      "Selected"
+    );
   }, [selectedManufacturerId, manufacturers]);
 
   const periodValid = useMemo(() => {
@@ -425,6 +535,7 @@ export default function ManufacturersReports() {
   const handleGenerate = async () => {
     setError("");
     setReport(null);
+    setSalesReport(null);
     setExpandedManufacturerId(null);
 
     if (!periodValid) {
@@ -438,14 +549,11 @@ export default function ManufacturersReports() {
       const orders = await fetchDoneOrdersInRange(dateFrom, dateTo);
 
       // Collect productIds for fallback computations and missing doc detection
-      const allProductIds = [];
       const legacyProductIds = [];
 
       for (const o of orders) {
         const items = Array.isArray(o.items) ? o.items : [];
         for (const it of items) {
-          if (it.productId) allProductIds.push(it.productId);
-
           const hasBuySnapshot =
             it.buyUnitPrice != null ||
             it.buyBase != null ||
@@ -456,8 +564,6 @@ export default function ManufacturersReports() {
         }
       }
 
-      // Fetch only what we need (legacy product ids) BUT also useful to detect missing docs.
-      // We'll fetch for legacy only, and missing docs check is done against legacy set + any row needing fallback.
       const souvenirsMap = await fetchSouvenirsByIds([...legacyProductIds]);
 
       // Data structures
@@ -472,7 +578,14 @@ export default function ManufacturersReports() {
 
       // For drilldown: manufacturer -> product aggregation
       const productAggByManufacturer = new Map(); // mid -> Map(productId -> agg)
-      const ordersSetByManufacturer = new Map(); // mid -> Set(orderId)
+
+      // ✅ Internal sales aggregations
+      const salesAggByManufacturer = new Map();
+      const salesAggByProduct = new Map();
+      let salesRevenueTotal = 0;
+      let salesCostTotal = 0;
+      let salesQtyTotal = 0;
+      const salesOrdersSet = new Set();
 
       for (const o of orders) {
         const items = Array.isArray(o.items) ? o.items : [];
@@ -483,23 +596,19 @@ export default function ManufacturersReports() {
           : "";
         const customerId = o.customerId || "";
 
-        // VAT rate from order if exists
         const vatRate = safeNum(o?.quotation?.vatRate ?? VAT_RATE_DEFAULT);
 
         for (const it of items) {
           const productId = it.productId || "";
           const qty = safeNum(it.quantity);
 
-          // SELL info (from order item)
+          // SELL info (internal only)
           const sellUnitPrice = safeNum(it.price);
           const sellLineTotal = sellUnitPrice * qty;
 
-          // Fallback product for legacy calculations
           const product = souvenirsMap.get(productId);
 
-          // Manufacturer fields (your item snapshot uses manufacturerId + manufacturerName OR manufacturer)
-          const manufacturerId =
-            it.manufacturerId || product?.manufacturerId || "";
+          const manufacturerId = it.manufacturerId || product?.manufacturerId || "";
           const manufacturerName =
             it.manufacturerName ||
             it.manufacturer ||
@@ -509,8 +618,11 @@ export default function ManufacturersReports() {
           const missingManufacturerId = !manufacturerId;
           if (missingManufacturerId) missingManufacturerIdCount += 1;
 
-          // Filter by selected manufacturer
-          if (selectedManufacturerId !== "all" && manufacturerId !== selectedManufacturerId) {
+          // Filter by selected manufacturer (for payable report)
+          if (
+            selectedManufacturerId !== "all" &&
+            manufacturerId !== selectedManufacturerId
+          ) {
             continue;
           }
 
@@ -518,23 +630,20 @@ export default function ManufacturersReports() {
           let buyBase = it.buyBase != null ? safeNum(it.buyBase) : null;
           let tierMultiplierUsed =
             it.tierMultiplierUsed != null ? safeNum(it.tierMultiplierUsed) : null;
-          let buyUnitPrice =
-            it.buyUnitPrice != null ? safeNum(it.buyUnitPrice) : null;
-          let buyLineTotal =
-            it.buyLineTotal != null ? safeNum(it.buyLineTotal) : null;
+          let buyUnitPrice = it.buyUnitPrice != null ? safeNum(it.buyUnitPrice) : null;
+          let buyLineTotal = it.buyLineTotal != null ? safeNum(it.buyLineTotal) : null;
 
           let isLegacyBuyCalc = false;
 
-          // missing product doc means we can't compute legacy buy accurately
           const missingProductDoc = !product && (buyUnitPrice == null || buyLineTotal == null);
           if (missingProductDoc) missingProductDocCount += 1;
 
-          // Legacy fallback: compute from current product doc (only if product exists)
+          // Legacy fallback from current product doc
           if ((buyUnitPrice == null || buyLineTotal == null) && product) {
             isLegacyBuyCalc = true;
             legacyLinesCount += 1;
 
-            const base = safeNum(product?.buy); // product.buy is string in your docs
+            const base = safeNum(product?.buy);
             const mult = getTierMultiplierUsed(product, qty);
             const unit = base * mult;
             const line = unit * qty;
@@ -545,14 +654,20 @@ export default function ManufacturersReports() {
             buyLineTotal = buyLineTotal ?? line;
           }
 
-          // If still null (no snapshot and no product doc), set zeros
           buyBase = safeNum(buyBase);
           tierMultiplierUsed = safeNum(tierMultiplierUsed || 0);
           buyUnitPrice = safeNum(buyUnitPrice);
           buyLineTotal = safeNum(buyLineTotal);
 
-          // Optional: apply VAT on buy totals (toggle)
-          const buyLineTotalFinal = includeVatOnBuy ? buyLineTotal * (1 + vatRate) : buyLineTotal;
+          // ✅ Payable amount logic (base-only or tiered buy)
+          const baseOnlyLineTotal = buyBase * qty;   // NO multiplier
+          const tieredLineTotal = buyLineTotal;      // WITH multiplier
+
+          let payableLineTotal = payByBuyBaseOnly ? baseOnlyLineTotal : tieredLineTotal;
+
+          const payableLineTotalFinal = includeVatOnBuy
+            ? payableLineTotal * (1 + vatRate)
+            : payableLineTotal;
 
           const productName = it.name || product?.name || "";
           const midKey = manufacturerId || "unknown";
@@ -569,15 +684,13 @@ export default function ManufacturersReports() {
             buyBase,
             tierMultiplierUsed,
             buyUnitPrice,
-            buyLineTotal: buyLineTotalFinal,
-            sellUnitPrice,
-            sellLineTotal,
+            buyLineTotal: payableLineTotalFinal,
             isLegacyBuyCalc,
             missingManufacturerId,
             missingProductDoc: missingProductDoc && !product,
           });
 
-          // Aggregate manufacturer totals
+          // Aggregate manufacturer totals (payables)
           const existing =
             manufacturerAgg.get(midKey) || {
               manufacturerId: manufacturerId || "unknown",
@@ -588,44 +701,71 @@ export default function ManufacturersReports() {
               linesCount: 0,
             };
 
-          existing.totalToPay += buyLineTotalFinal;
+          existing.totalToPay += payableLineTotalFinal;
           existing.totalQty += qty;
           existing.ordersSet.add(o.id);
           existing.linesCount += 1;
+
           if (existing.manufacturerName === "Unknown Manufacturer" && manufacturerName) {
             existing.manufacturerName = manufacturerName;
           }
           manufacturerAgg.set(midKey, existing);
 
-          // Drilldown: per product agg
-          if (!productAggByManufacturer.has(midKey)) productAggByManufacturer.set(midKey, new Map());
+          // Drilldown per-product (payables)
+          if (!productAggByManufacturer.has(midKey)) {
+            productAggByManufacturer.set(midKey, new Map());
+          }
           const pMap = productAggByManufacturer.get(midKey);
 
+          const pKey = productId || productName || "unknownProduct";
           const pExisting =
-            pMap.get(productId || productName || "unknownProduct") || {
+            pMap.get(pKey) || {
               productId: productId || "",
               productName: productName || "Unknown Product",
               totalQty: 0,
               totalToPay: 0,
-              buyUnitSum: 0,
-              unitCount: 0,
             };
 
           pExisting.totalQty += qty;
-          pExisting.totalToPay += buyLineTotalFinal;
-          // avg buy unit - weight by qty
-          pExisting.buyUnitSum += buyUnitPrice * qty;
-          pExisting.unitCount += qty;
+          pExisting.totalToPay += payableLineTotalFinal;
+          pMap.set(pKey, pExisting);
 
-          pMap.set(productId || productName || "unknownProduct", pExisting);
+          // ✅ Internal Sales aggregation (revenue/cost/profit)
+          salesRevenueTotal += sellLineTotal;
+          salesCostTotal += payableLineTotalFinal;
+          salesQtyTotal += qty;
+          salesOrdersSet.add(o.id);
 
-          // manufacturer -> orders set
-          if (!ordersSetByManufacturer.has(midKey)) ordersSetByManufacturer.set(midKey, new Set());
-          ordersSetByManufacturer.get(midKey).add(o.id);
+          const mPrev = salesAggByManufacturer.get(midKey) || {
+            manufacturerId: manufacturerId || "unknown",
+            manufacturerName,
+            revenue: 0,
+            cost: 0,
+            qty: 0,
+            ordersSet: new Set(),
+          };
+          mPrev.revenue += sellLineTotal;
+          mPrev.cost += payableLineTotalFinal;
+          mPrev.qty += qty;
+          mPrev.ordersSet.add(o.id);
+          salesAggByManufacturer.set(midKey, mPrev);
+
+          const spPrev = salesAggByProduct.get(pKey) || {
+            productId: productId || "",
+            productName: productName || "Unknown Product",
+            manufacturerName,
+            revenue: 0,
+            cost: 0,
+            qty: 0,
+          };
+          spPrev.revenue += sellLineTotal;
+          spPrev.cost += payableLineTotalFinal;
+          spPrev.qty += qty;
+          salesAggByProduct.set(pKey, spPrev);
         }
       }
 
-      // summary rows
+      // summary rows (payables)
       let summaryRows = Array.from(manufacturerAgg.values()).map((m) => ({
         manufacturerId: m.manufacturerId,
         manufacturerName: m.manufacturerName,
@@ -638,10 +778,12 @@ export default function ManufacturersReports() {
       // sorting
       const dir = sortDir === "asc" ? 1 : -1;
       summaryRows.sort((a, b) => {
-        if (sortKey === "name") return dir * (a.manufacturerName || "").localeCompare(b.manufacturerName || "");
-        if (sortKey === "totalQty") return dir * (safeNum(a.totalQty) - safeNum(b.totalQty));
-        if (sortKey === "orders") return dir * (safeNum(a.ordersCount) - safeNum(b.ordersCount));
-        // totalToPay
+        if (sortKey === "name")
+          return dir * (a.manufacturerName || "").localeCompare(b.manufacturerName || "");
+        if (sortKey === "totalQty")
+          return dir * (safeNum(a.totalQty) - safeNum(b.totalQty));
+        if (sortKey === "orders")
+          return dir * (safeNum(a.ordersCount) - safeNum(b.ordersCount));
         return dir * (safeNum(a.totalToPay) - safeNum(b.totalToPay));
       });
 
@@ -652,7 +794,7 @@ export default function ManufacturersReports() {
         return (a.orderDate || "").localeCompare(b.orderDate || "");
       });
 
-      // Build statements per manufacturer (for export)
+      // Build statements per manufacturer (manufacturer-friendly export)
       for (const s of summaryRows) {
         const mid = s.manufacturerId || "unknown";
         const pMap = productAggByManufacturer.get(mid) || new Map();
@@ -662,7 +804,6 @@ export default function ManufacturersReports() {
             productId: p.productId,
             productName: p.productName,
             totalQty: p.totalQty,
-            avgBuyUnitPrice: p.unitCount > 0 ? Number((p.buyUnitSum / p.unitCount).toFixed(2)) : 0,
             totalToPay: Number(p.totalToPay.toFixed(2)),
           }))
           .sort((a, b) => safeNum(b.totalToPay) - safeNum(a.totalToPay));
@@ -676,9 +817,8 @@ export default function ManufacturersReports() {
             productId: r.productId,
             productName: r.productName,
             qty: r.qty,
-            buyUnitPrice: Number(r.buyUnitPrice.toFixed(2)),
-            tierMultiplierUsed: r.tierMultiplierUsed,
-            buyLineTotal: Number(r.buyLineTotal.toFixed(2)),
+            buyUnitPrice: Number((r.buyUnitPrice || 0).toFixed(2)),
+            buyLineTotal: Number((r.buyLineTotal || 0).toFixed(2)),
             isLegacyBuyCalc: r.isLegacyBuyCalc,
           }));
 
@@ -688,10 +828,7 @@ export default function ManufacturersReports() {
           products,
           lines,
           totalToPay: Number(s.totalToPay.toFixed(2)),
-          note:
-            legacyLinesCount > 0
-              ? "Some lines may be legacy-calculated from current product data."
-              : "",
+          note: legacyLinesCount > 0 ? "Some lines may be legacy-calculated." : "",
         };
       }
 
@@ -708,6 +845,57 @@ export default function ManufacturersReports() {
           missingProductDocCount,
         },
         statementsByManufacturer,
+      });
+
+      // ✅ Build internal salesReport
+      const revenue = Number(salesRevenueTotal.toFixed(2));
+      const cost = Number(salesCostTotal.toFixed(2));
+      const profit = Number((revenue - cost).toFixed(2));
+      const margin = revenue > 0 ? Number(((profit / revenue) * 100).toFixed(2)) : 0;
+
+      const byManufacturer = Array.from(salesAggByManufacturer.values())
+        .map((m) => {
+          const p = m.revenue - m.cost;
+          return {
+            manufacturerId: m.manufacturerId,
+            manufacturerName: m.manufacturerName,
+            ordersCount: m.ordersSet.size,
+            qty: m.qty,
+            revenue: Number(m.revenue.toFixed(2)),
+            cost: Number(m.cost.toFixed(2)),
+            profit: Number(p.toFixed(2)),
+            margin: m.revenue > 0 ? Number(((p / m.revenue) * 100).toFixed(2)) : 0,
+          };
+        })
+        .sort((a, b) => b.profit - a.profit);
+
+      const byProduct = Array.from(salesAggByProduct.values())
+        .map((p) => {
+          const pr = p.revenue - p.cost;
+          return {
+            productId: p.productId,
+            productName: p.productName,
+            manufacturerName: p.manufacturerName,
+            qty: p.qty,
+            revenue: Number(p.revenue.toFixed(2)),
+            cost: Number(p.cost.toFixed(2)),
+            profit: Number(pr.toFixed(2)),
+            margin: p.revenue > 0 ? Number(((pr / p.revenue) * 100).toFixed(2)) : 0,
+          };
+        })
+        .sort((a, b) => b.profit - a.profit);
+
+      setSalesReport({
+        fromISO: dateFrom,
+        toISO: dateTo,
+        ordersCount: salesOrdersSet.size,
+        qty: salesQtyTotal,
+        revenue,
+        cost,
+        profit,
+        margin,
+        byManufacturer,
+        byProduct,
       });
     } catch (e) {
       console.error(e);
@@ -728,6 +916,7 @@ export default function ManufacturersReports() {
     if (report.health.missingProductDocCount > 0)
       noteParts.push(`Missing product docs: ${report.health.missingProductDocCount}`);
     if (includeVatOnBuy) noteParts.push("BUY totals include VAT (toggle ON)");
+    noteParts.push(payByBuyBaseOnly ? "Payables = BuyBase only" : "Payables = Tiered buy");
 
     exportSummaryDetails({
       summaryRows: report.summaryRows,
@@ -750,7 +939,10 @@ export default function ManufacturersReports() {
         manufacturerName: "All manufacturers",
         fromISO: dateFrom,
         toISO: dateTo,
-        note: includeVatOnBuy ? "BUY totals include VAT (toggle ON)" : "BUY totals exclude VAT",
+        note: [
+          includeVatOnBuy ? "BUY totals include VAT" : "BUY totals exclude VAT",
+          payByBuyBaseOnly ? "Payables = BuyBase only" : "Payables = Tiered buy",
+        ].join(" | "),
       },
     });
   };
@@ -767,12 +959,20 @@ export default function ManufacturersReports() {
         manufacturerName: manufacturerName || st.manufacturerName,
         fromISO: dateFrom,
         toISO: dateTo,
-        note: includeVatOnBuy ? "BUY totals include VAT (toggle ON)" : "BUY totals exclude VAT",
+        note: [
+          includeVatOnBuy ? "BUY totals include VAT" : "BUY totals exclude VAT",
+          payByBuyBaseOnly ? "Payables = BuyBase only" : "Payables = Tiered buy",
+        ].join(" | "),
       },
     });
   };
 
-  // Filter summary by search too (optional but feels right)
+  const handleExportSalesReport = () => {
+    if (!salesReport) return;
+    exportSalesReportWorkbook({ salesReport });
+  };
+
+  // Filter summary by search too
   const filteredSummary = useMemo(() => {
     if (!report) return [];
     const q = manufacturerSearch.trim().toLowerCase();
@@ -839,7 +1039,9 @@ export default function ManufacturersReports() {
           {/* Filters row */}
           <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
             <div className="bg-gray-50 rounded-xl p-3 border">
-              <label className="block text-[11px] text-gray-500 mb-1">Manufacturer filter</label>
+              <label className="block text-[11px] text-gray-500 mb-1">
+                Manufacturer filter
+              </label>
               <select
                 value={selectedManufacturerId}
                 onChange={(e) => setSelectedManufacturerId(e.target.value)}
@@ -910,7 +1112,7 @@ export default function ManufacturersReports() {
                 </select>
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-2">
+              <div className="mt-3 flex flex-col gap-2">
                 <label className="text-xs text-gray-600 flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -919,8 +1121,19 @@ export default function ManufacturersReports() {
                   />
                   Apply VAT on BUY totals
                 </label>
+
+                <label className="text-xs text-gray-600 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={payByBuyBaseOnly}
+                    onChange={(e) => setPayByBuyBaseOnly(e.target.checked)}
+                  />
+                  Pay manufacturer by BuyBase only (no multiplier)
+                </label>
+
                 <span className="text-[11px] text-gray-500">
-                  {includeVatOnBuy ? "VAT added" : "VAT excluded"}
+                  {includeVatOnBuy ? "VAT added" : "VAT excluded"} •{" "}
+                  {payByBuyBaseOnly ? "Base-only payables" : "Tiered payables"}
                 </span>
               </div>
             </div>
@@ -953,6 +1166,15 @@ export default function ManufacturersReports() {
               style={{ borderColor: BROWN, color: BROWN }}
             >
               Export All Manufacturer Statements
+            </button>
+
+            <button
+              onClick={handleExportSalesReport}
+              disabled={!salesReport || loading}
+              className="px-4 py-2 rounded-xl font-semibold border bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ borderColor: OLIVE, color: OLIVE }}
+            >
+              Export Sales Report (Internal)
             </button>
           </div>
 
@@ -1007,6 +1229,36 @@ export default function ManufacturersReports() {
                 </div>
               </div>
             </div>
+
+            {/* Sales summary quick view (internal) */}
+            {salesReport ? (
+              <div className="mt-6 grid grid-cols-1 lg:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl shadow-sm border p-4">
+                  <div className="text-xs text-gray-500">Revenue (sell)</div>
+                  <div className="text-2xl font-extrabold mt-1" style={{ color: BROWN }}>
+                    {formatMoney(salesReport.revenue)}
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border p-4">
+                  <div className="text-xs text-gray-500">Cost (payables)</div>
+                  <div className="text-2xl font-extrabold mt-1" style={{ color: BROWN }}>
+                    {formatMoney(salesReport.cost)}
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border p-4">
+                  <div className="text-xs text-gray-500">Profit</div>
+                  <div className="text-2xl font-extrabold mt-1" style={{ color: OLIVE }}>
+                    {formatMoney(salesReport.profit)}
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border p-4">
+                  <div className="text-xs text-gray-500">Margin</div>
+                  <div className="text-2xl font-extrabold mt-1" style={{ color: OLIVE }}>
+                    {salesReport.margin}%
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {/* Summary table */}
             <div className="mt-6 bg-white rounded-2xl shadow-sm border p-4">
@@ -1126,7 +1378,6 @@ export default function ManufacturersReports() {
                       <th className="py-2 pr-4">Product</th>
                       <th className="py-2 pr-4">Qty</th>
                       <th className="py-2 pr-4">Buy unit</th>
-                      <th className="py-2 pr-4">Multiplier</th>
                       <th className="py-2 pr-2 text-right">Line total</th>
                     </tr>
                   </thead>
@@ -1159,7 +1410,6 @@ export default function ManufacturersReports() {
                         <td className="py-2 pr-4">{r.productName}</td>
                         <td className="py-2 pr-4">{r.qty}</td>
                         <td className="py-2 pr-4">{formatMoney(r.buyUnitPrice)}</td>
-                        <td className="py-2 pr-4">{r.tierMultiplierUsed || "-"}</td>
                         <td className="py-2 pr-2 text-right font-semibold" style={{ color: OLIVE }}>
                           {formatMoney(r.buyLineTotal)}
                         </td>
@@ -1168,7 +1418,7 @@ export default function ManufacturersReports() {
 
                     {report.detailRows.length > 80 ? (
                       <tr>
-                        <td colSpan={7} className="py-3 text-center text-gray-500">
+                        <td colSpan={6} className="py-3 text-center text-gray-500">
                           Showing first 80 rows — export Excel for full list.
                         </td>
                       </tr>
@@ -1191,11 +1441,7 @@ export default function ManufacturersReports() {
 // ---------- Drilldown component ----------
 function ManufacturerDrilldown({ manufacturerId, manufacturerName, statement, onExport }) {
   if (!statement) {
-    return (
-      <div className="text-sm text-gray-600">
-        No statement data available for this manufacturer.
-      </div>
-    );
+    return <div className="text-sm text-gray-600">No statement data available for this manufacturer.</div>;
   }
 
   const topProducts = statement.products.slice(0, 12);
@@ -1260,7 +1506,6 @@ function ManufacturerDrilldown({ manufacturerId, manufacturerName, statement, on
               <tr className="text-left text-xs text-gray-500 border-b">
                 <th className="py-2 px-3">Product</th>
                 <th className="py-2 px-3">Qty</th>
-                <th className="py-2 px-3">Avg buy unit</th>
                 <th className="py-2 px-3 text-right">Total to pay</th>
               </tr>
             </thead>
@@ -1274,7 +1519,6 @@ function ManufacturerDrilldown({ manufacturerId, manufacturerName, statement, on
                     ) : null}
                   </td>
                   <td className="py-2 px-3">{p.totalQty}</td>
-                  <td className="py-2 px-3">{formatMoney(p.avgBuyUnitPrice)}</td>
                   <td className="py-2 px-3 text-right font-semibold" style={{ color: OLIVE }}>
                     {formatMoney(p.totalToPay)}
                   </td>
@@ -1282,7 +1526,7 @@ function ManufacturerDrilldown({ manufacturerId, manufacturerName, statement, on
               ))}
               {statement.products.length > topProducts.length ? (
                 <tr>
-                  <td colSpan={4} className="py-2 px-3 text-xs text-gray-500">
+                  <td colSpan={3} className="py-2 px-3 text-xs text-gray-500">
                     Export statement to see all products.
                   </td>
                 </tr>
@@ -1292,7 +1536,7 @@ function ManufacturerDrilldown({ manufacturerId, manufacturerName, statement, on
         </div>
       </div>
 
-      {/* Orders contributing */}
+      {/* Contributing lines (preview) */}
       <div className="mt-5">
         <h3 className="font-semibold mb-2" style={{ color: BROWN }}>
           Contributing lines (preview)

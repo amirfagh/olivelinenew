@@ -868,6 +868,19 @@ max-w-[80%] sm:max-w-none
                   <p className="text-sm text-gray-700 mt-3 line-clamp-3">
                     {souvenir.description || "No description"}
                   </p>
+                    {/* Size + Material chips */}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {souvenir.size && (
+                        <span className="inline-block bg-gray-100 text-[#4E342E] text-xs px-2 py-1 rounded-md">
+                          📏 {souvenir.size}
+                        </span>
+                      )}
+                      {souvenir.material && (
+                        <span className="inline-block bg-gray-100 text-[#4E342E] text-xs px-2 py-1 rounded-md">
+                          🪵 {souvenir.material}
+                        </span>
+                      )}
+                    </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
 
