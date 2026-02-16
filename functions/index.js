@@ -259,3 +259,70 @@ exports.onSignedOfferUploaded = onDocumentUpdated(
     logger.info("onSignedOfferUploaded email sent", { orderId });
   }
 );
+function leadEmailHtml(lead) {
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  }[c]));
+
+  return `
+  <div style="font-family:Arial,sans-serif;background:#FAF9F6;padding:22px;">
+    <div style="max-width:720px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:14px;overflow:hidden;">
+      <div style="background:#708238;color:#FAF9F6;padding:14px 18px;">
+        <div style="font-size:16px;font-weight:800;">OliveLine</div>
+        <div style="font-size:12px;opacity:.9;margin-top:4px;">New Lead Request</div>
+      </div>
+
+      <div style="padding:18px;color:#4E342E;">
+        <div style="font-size:14px;font-weight:800;margin-bottom:10px;">Lead Details</div>
+
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Name</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${esc(lead.name)}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Shop</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${esc(lead.shopName)}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Email</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${esc(lead.email)}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Phone/WhatsApp</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${esc(lead.phone)}</td></tr>
+          <tr><td style="padding:8px;vertical-align:top;"><b>Message</b></td><td style="padding:8px;white-space:pre-wrap;">${esc(lead.message)}</td></tr>
+        </table>
+
+        <div style="margin-top:14px;font-size:12px;opacity:.8;">
+          Source: ${esc(lead.source || "login-page")} • Status: ${esc(lead.status || "new")}
+        </div>
+      </div>
+
+      <div style="padding:12px 18px;background:#EDE6D6;color:#4E342E;font-size:12px;opacity:.85;">
+        Automated lead notification from OliveLine.
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+exports.onLeadCreated = onDocumentCreated(
+  
+  { document: "leads/{leadId}", secrets: [RESEND_API_KEY] },
+  async (event) => {
+    const lead = event.data?.data();
+    const leadId = event.params.leadId;
+
+    if (!lead) return;
+
+    try {
+      const resend = new Resend(RESEND_API_KEY.value());
+
+      // Send to admin only
+      await resend.emails.send({
+        from: FROM_EMAIL.value(),
+        to: ADMIN_EMAIL.value(),
+        subject: `OliveLine: New lead — ${lead.name || "Someone"} (${lead.shopName || "No shop"})`,
+        html: leadEmailHtml(lead),
+      });
+
+      logger.info("Lead email sent", { leadId });
+    } catch (err) {
+      logger.error("Lead email failed", { leadId, err });
+    }
+  }
+);

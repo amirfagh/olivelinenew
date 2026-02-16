@@ -3,7 +3,8 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
-
+import logo from "../assets/oliveline-logo3.png";
+import logo2 from "../assets/oliveline-logo44.png";
 function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -76,18 +77,19 @@ function Navbar() {
       <nav className="bg-[#708238] text-[#FAF9F6] shadow-md">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           {/* Logo / Brand */}
-          <Link to="/catalog" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full border border-[#FAF9F6]/60 flex items-center justify-center text-xs font-bold">
-              OL
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="font-semibold tracking-wide text-sm">
-                OliveLine
-              </span>
-              <span className="text-[11px] text-[#FAF9F6]/80">
-                B2B Olivewood Supply
-              </span>
-            </div>
+      
+          <Link to="/catalog" className="flex items-center ml-12">
+              <img 
+  src={logo} 
+  alt="OliveLine Logo"
+   className="h-20 md:h-20 lg:h-20 object-contain"
+/>
+<img 
+  src={logo2} 
+  alt="OliveLine Logo"
+   className="h-16  md:h-18 lg:h-19 object-contain -ml-6"
+   
+/>
           </Link>
 
           {/* Desktop links */}
