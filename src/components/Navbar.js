@@ -5,6 +5,7 @@ import { auth, db } from "../firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import logo from "../assets/oliveline-logo3.png";
 import logo2 from "../assets/oliveline-logo44.png";
+
 function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,7 +55,7 @@ function Navbar() {
       { to: "/orders", label: "Orders" },
       { to: "/admin-order-approval", label: "Approvals" },
       { to: "/catalog", label: "Catalog" },
-       { to: "/ManufacturersReports", label: "Manufacturers Reports" }
+      { to: "/ManufacturersReports", label: "Manufacturers Reports" }
     );
   }
 
@@ -75,21 +76,36 @@ function Navbar() {
   return (
     <>
       <nav className="bg-[#708238] text-[#FAF9F6] shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           {/* Logo / Brand */}
-      
-          <Link to="/catalog" className="flex items-center ml-12">
-              <img 
-  src={logo} 
-  alt="OliveLine Logo"
-   className="h-20 md:h-20 lg:h-20 object-contain"
-/>
-<img 
-  src={logo2} 
-  alt="OliveLine Logo"
-   className="h-16  md:h-18 lg:h-19 object-contain -ml-6"
-   
-/>
+          <Link
+            to="/catalog"
+            className="flex items-center min-w-0 flex-shrink overflow-hidden"
+          >
+            <img
+              src={logo}
+              alt="OliveLine Logo"
+              className="
+                object-contain
+                h-12
+                xs:h-14
+                sm:h-16
+                md:h-20
+              "
+            />
+
+            <img
+              src={logo2}
+              alt="OliveLine Logo"
+              className="
+                object-contain
+                -ml-4
+                h-10
+                xs:h-12
+                sm:h-14
+                md:h-16
+              "
+            />
           </Link>
 
           {/* Desktop links */}
@@ -110,11 +126,10 @@ function Navbar() {
 
           {/* Mobile hamburger */}
           <button
-            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md border border-[#FAF9F6]/40 hover:bg-[#FAF9F6]/10 transition"
+            className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md border border-[#FAF9F6]/40 hover:bg-[#FAF9F6]/10 transition flex-shrink-0"
             onClick={() => setMobileOpen(true)}
             aria-label="Open menu"
           >
-            {/* simple icon */}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
               <path
                 d="M4 7h16M4 12h16M4 17h16"

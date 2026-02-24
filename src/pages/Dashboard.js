@@ -667,19 +667,7 @@ const addManufacturer = async () => {
                     Edit
                   </button>
 
-                  <button
-                    onClick={() => deleteSouvenir(s.id)}
-                    style={{
-                      backgroundColor: "#B00020",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "6px",
-                      padding: "6px 12px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Delete
-                  </button>
+                  
                 </div>
               </div>
             );

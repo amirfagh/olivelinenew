@@ -189,8 +189,7 @@ export default function Login() {
                 className="mt-3 text-[14px] sm:text-[15px] lg:text-[16px] leading-relaxed max-w-xl"
                 style={{ color: BROWN, opacity: 0.82 }}
               >
-                OliveLine connects souvenir shops directly with trusted olive wood manufacturers.
-                Transparent quotations, tiered pricing, and tracked delivery — built for B2B.
+                OliveLine simplifies wholesale sourcing of authentic olive wood souvenirs. Through one unified platform, you access curated products, transparent tiered pricing, and dependable delivery — all managed seamlessly from order to fulfillment.
               </p>
 
               {/* Badges */}
@@ -271,7 +270,7 @@ export default function Login() {
                     Sign in
                   </h2>
                   <p className="mt-1 text-[12px] leading-relaxed" style={{ color: BROWN, opacity: 0.75 }}>
-                    Authorized customers and admins can sign in with Google.
+                    Authorized customers can sign in with Google.
                   </p>
                 </div>
                 <div
@@ -316,7 +315,7 @@ export default function Login() {
                     <Input placeholder="Your name *" value={lead.name} onChange={(e) => setLead({ ...lead, name: e.target.value })} />
                     <Input placeholder="Shop name" value={lead.shopName} onChange={(e) => setLead({ ...lead, shopName: e.target.value })} />
                     <Input placeholder="Email *" value={lead.email} onChange={(e) => setLead({ ...lead, email: e.target.value })} />
-                    <Input placeholder="Phone / WhatsApp" value={lead.phone} onChange={(e) => setLead({ ...lead, phone: e.target.value })} />
+                    <Input placeholder="Phone " value={lead.phone} onChange={(e) => setLead({ ...lead, phone: e.target.value })} />
                     <textarea
                       placeholder="Message (what products / quantities?)"
                       value={lead.message}
